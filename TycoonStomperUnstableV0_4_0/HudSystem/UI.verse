@@ -10,14 +10,14 @@ using { /Verse.org/Assets }
 using {cc}
 using{Super}
 <#
-█▀▄ █▀▀ █░█ █▀▀ █░░ █▀█ █▀█ █▀▀ █▀▄   █▄▄ █▄█   ▀█▀ █▀ ▄▀█ █▀█
-█▄▀ ██▄ ▀▄▀ ██▄ █▄▄ █▄█ █▀▀ ██▄ █▄▀   █▄█ ░█░   ░█░ ▄█ █▀█ █▀▄
+█▀▄ █▀▀ █░█ █▀▀ █░░ █▀█ █▀█ █▀▀ █▀▄   █▄▄ █▄█   ▀█▀ █▀ ▄▀█ █▀█
+█▄▀ ██▄ ▀▄▀ ██▄ █▄▄ █▄█ █▀▀ ██▄ █▄▀   █▄█ ░█░   ░█░ ▄█ █▀█ █▀▄
 
-▄▀█ █░░ █░░   █▀█ █ █▀▀ █░█ ▀█▀ █▀   █▀█ █▀▀ █▀ █▀▀ █▀█ █░█ █▀▀ █▀▄
-█▀█ █▄▄ █▄▄   █▀▄ █ █▄█ █▀█ ░█░ ▄█   █▀▄ ██▄ ▄█ ██▄ █▀▄ ▀▄▀ ██▄ █▄▀
+▄▀█ █░░ █░░   █▀█ █ █▀▀ █░█ ▀█▀ █▀   █▀█ █▀▀ █▀ █▀▀ █▀█ █░█ █▀▀ █▀▄
+█▀█ █▄▄ █▄▄   █▀▄ █ █▄█ █▀█ ░█░ ▄█   █▀▄ ██▄ ▄█ ██▄ █▀▄ ▀▄▀ ██▄ █▄▀
 
-█▀▄ █▀█   █▄░█ █▀█ ▀█▀   █▀ █▀▀ █░░ █░░
-█▄▀ █▄█   █░▀█ █▄█ ░█░   ▄█ ██▄ █▄▄ █▄▄
+█▀▄ █▀█   █▄░█ █▀█ ▀█▀   █▀ █▀▀ █░░ █░░
+█▄▀ █▄█   █░▀█ █▄█ ░█░   ▄█ ██▄ █▄▄ █▄▄
 #>
 
 currency_ui<public>:=class():
@@ -59,6 +59,25 @@ currency_ui<public>:=class():
             then:
                 CurrencyValue()
                 #Prints the currency value, done random to not flood logs.
+
+    ManageRebirthUI(CAM: [agent]?text_block)<suspends>:void=
+        var timeout:int = 0
+        timeoutlimit:int=100
+        loop:
+            Sleep(0.1);
+            if:
+                ActiveHud := CAM[Player]?
+                PlayerStats := GetCoreStats[Player, owner.Base_Setup.PersistenceCore]
+                RebirthCount := PlayerStats.Rebirths
+            then:
+                ActiveHud.SetText(S2M("{RebirthCount}"))
+            else:
+                GlobalSuperlog("Unable to attain rebirth stats")
+                set timeout += 1
+                if:
+                    timeout >= timeoutlimit
+                then:
+                    Print("== WARNING MANAGING REBIRTH UI TIMED OUT AND FAILED FOR BASE: {owner.Base_Setup.Name} ==")
 
     ManagePS(CAM: []tuple([agent]?text_block, ?int, string))<suspends>:void=
         TotalPS := CAM.Length-1
@@ -189,6 +208,55 @@ currency_ui<public>:=class():
                     Widget:=Overlay
                     HorizontalAlignment := horizontal_alignment.Fill
                     VerticalAlignment := vertical_alignment.Top
+
+        # Add Rebirth display
+        RebirthText := text_block:
+            DefaultText := S2M("0")
+            DefaultTextColor := color{R:=1.000000, G:=1.000000, B:=1.000000}
+
+        var RebirthAmount: [agent]?text_block = map{}
+        if(set RebirthAmount[Player] = option{RebirthText}){}
+        spawn{ManageRebirthUI(RebirthAmount)}
+
+        RebirthOverlay := overlay:
+            Slots := array:
+                overlay_slot:
+                    Widget := texture_block:
+                        DefaultImage := StroklessBG
+                        DefaultTint := color{R:=0.5, G:=0.0, B:=0.5}
+                        DefaultDesiredSize := vector2{X:=32.0, Y:=55.0}
+                    HorizontalAlignment := horizontal_alignment.Fill
+                    VerticalAlignment := vertical_alignment.Center
+                    Padding:=margin{Right:=5.0}
+
+                overlay_slot:
+                    Widget := text_block:
+                        DefaultText := S2M("💸")
+                        DefaultTextColor := color{R:=1.000000, G:=1.000000, B:=1.000000}
+                    HorizontalAlignment := horizontal_alignment.Left
+                    VerticalAlignment := vertical_alignment.Center
+                    Padding:=margin{Left:=11.0, Right:=35.0}
+
+                overlay_slot:
+                    Widget := text_block:
+                        DefaultText := S2M("Rebirths")
+                        DefaultTextOpacity := 0.75
+                        DefaultTextColor := color{R:=1.000000, G:=1.000000, B:=1.000000}
+                    HorizontalAlignment := horizontal_alignment.Center
+                    VerticalAlignment := vertical_alignment.Center
+                    Padding:=margin{Left:=11.0, Right:=40.0}
+
+                overlay_slot:
+                    Widget := RebirthText
+                    HorizontalAlignment := horizontal_alignment.Right
+                    VerticalAlignment := vertical_alignment.Center
+                    Padding:=margin{Left:=11.0, Right:=40.0}
+
+        set StackBoxHoldings += array:
+            stack_box_slot:
+                Widget:=RebirthOverlay
+                HorizontalAlignment := horizontal_alignment.Fill
+                VerticalAlignment := vertical_alignment.Top
 
         var FindBottom : float = 80.0 + (125.0*StackBoxHoldings.Length-2.0)
 
