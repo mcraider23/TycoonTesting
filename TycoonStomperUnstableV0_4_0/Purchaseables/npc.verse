@@ -1,5 +1,7 @@
 using { /Verse.org/Simulation }
 using { /Fortnite.com/Devices }
+using { /Fortnite.com/Characters }
+using { /Fortnite.com/Game }
 using { /UnrealEngine.com}
 using { /UnrealEngine.com/Temporary/SpatialMath }
 using {cc}
@@ -23,16 +25,29 @@ npc_buyable<public>:=class<concrete><final>(purchaseable):
     #Hosts the NPC spawner when the item is bought and grants the player money when the NPC is killed
     Host<override>()<suspends>:void=
         NPCSpawnerConfig.Enable()
+        
         loop:
             Agent := NPCSpawnerConfig.OnKill.Await()
             if:
-                Player := player[Agent]
                 Owner := MaybeOwner?
             then:
-                GrantMoney(Owner, Player, NPCSpawnerConfig.CurrencyOnKillID, NPCSpawnerConfig.OnKillGrantAmount, BypassZone)
-                GrantXP(Owner, Player, NPCSpawnerConfig.OnKillExperienceAmount)
-                HudConfig.OnSuccessfullPlayer(Player)
-                if(ItemGranter := NPCSpawnerConfig.OptItemGranter?){ItemGranter.GrantItem(Player)}
+                # Check if the agent is a player
+                if (Player := player[Agent]):
+                    # Player killed the NPC directly
+                    GrantMoney(Owner, Player, NPCSpawnerConfig.CurrencyOnKillID, NPCSpawnerConfig.OnKillGrantAmount, BypassZone)
+                    GrantXP(Owner, Player, NPCSpawnerConfig.OnKillExperienceAmount)
+                    HudConfig.OnSuccessfullPlayer(Player)
+                    if(ItemGranter := NPCSpawnerConfig.OptItemGranter?){ItemGranter.GrantItem(Player)}
+                else if (RootPlayer := Owner.RootPlayer?):
+                    # Non-player (turret) killed the NPC, use the base's root player
+                    Print("Non-player kill detected, rewarding root player")
+                    GrantMoney(Owner, RootPlayer, NPCSpawnerConfig.CurrencyOnKillID, NPCSpawnerConfig.OnKillGrantAmount, BypassZone)
+                    GrantXP(Owner, RootPlayer, NPCSpawnerConfig.OnKillExperienceAmount)
+                    HudConfig.OnSuccessfullPlayer(RootPlayer)
+                    if(ItemGranter := NPCSpawnerConfig.OptItemGranter?){ItemGranter.GrantItem(RootPlayer)}
+                else:
+                    # No root player set yet - skip this kill
+                    Print("Turret kill but no root player identified - skipping reward")
 
         
 unique_npc_spawner<public>:=class<concrete>(Toggleable, Inaugurable):
@@ -57,7 +72,6 @@ unique_npc_spawner<public>:=class<concrete>(Toggleable, Inaugurable):
                 Agent := InteractionResult.Source?
             then:
                 OnKill.Signal(Agent)
-                
 
                 
 
