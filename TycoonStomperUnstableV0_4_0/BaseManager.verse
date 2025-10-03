@@ -278,7 +278,7 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
     {
         Base_Setup.RebirthConfig.HudConfig.Initialize(Self)
         loop:
-            Interactor := Base_Setup.RebirthConfig.RebirthButton.InteractedWithEvent.Await()
+            Interactor := Base_Setup.RebirthConfig.RebirthButton.ActivatedEvent.Await()
             if:
                 Player := player[Interactor]
                 PlayerStats := GetCoreStats[Player, Base_Setup.PersistenceCore]
