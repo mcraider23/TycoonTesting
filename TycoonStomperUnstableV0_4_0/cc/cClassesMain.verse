@@ -35,7 +35,7 @@ using {cc}
 
 
 rebirth_main<public>:=class<concrete>(Inaugurable, PlayerSpecificStringReturnables):
-    @editable var RebirthButton <public>: button_device = button_device{}
+    @editable var RebirthButton <public>: conditional_button_device = conditional_button_device{}
     @editable var RebirthCashMultiplier<public> : float = 1.5
     @editable var RebirthCost <public> : float = 1000.0
     @editable var RebirthCostCurrencyID <public> : int = 0
