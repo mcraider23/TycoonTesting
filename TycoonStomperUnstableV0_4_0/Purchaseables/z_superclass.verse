@@ -125,13 +125,16 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
 
         if:
             IsPurchased = PurchasedStatus.Purchased
-            
         then:
             set CanLoad = true
             set IsPurchased = PurchasedStatus.NotPurchased
             Purchase_Zone.Enable()
             Purchase_Zone.Show()
             spawn{SubHost()}
+        else:
+            # CRITICAL FIX: Also restart SubHost for items that were never purchased
+            spawn{SubHost()}
+            
         if:
             StartAs = Dependency.Unlocked
             Owner := MaybeOwner?
@@ -767,32 +770,3 @@ fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
         
     #Custom class methods
     AsyncPlayFX(Time:float)<suspends>:void={PlayFX(); Sleep(Time); StopFX(); return}
-
-
-
-        
-
-
-        
-
-            
-    
-    
-
-
-
-
-
-
-            
-                
-
-
-
-
-
-
-        
-        
-        
-
