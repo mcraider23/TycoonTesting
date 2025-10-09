@@ -2,6 +2,8 @@ using { /Verse.org/Simulation }
 using { /Fortnite.com/Devices }
 using {/Fortnite.com/Teams}
 using {cc}
+
+# Enhanced hitable with leveling system
 hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
 
     @editable var hitableConfig : unique_hitable_buyable = unique_hitable_buyable{}
@@ -9,13 +11,8 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
 
 
     Initialize<override>(Hostess:base, I:int):void=    
-        #Calls the parent class's Initialize method
         (super:)Initialize(Hostess, I)
-
-        #Initalizes all the NPC spawners
         hitableConfig.Initialize(Hostess)
-        
-        #Lists out all the properties of the item
         Detail("hitableBuyable")
 
         if:
@@ -26,6 +23,7 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
  
     OnRebirth<override>():void=
         (super:)OnRebirth()
+        hitableConfig.ResetLevel()
 
     GetStringParams<override>(P:?player)<transacts>:[string]string=
         var default : [string]string = (super:)GetStringParams(P)
@@ -39,13 +37,17 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
         set default = MergeStringMaps(default, map{
                 "[CurrencyOnHitID]" => "{hitableConfig.CurrencyOnHitID}",
                 "[OnHitExperienceAmount]" => "{hitableConfig.OnHitExperienceAmount}",
-                "[OnHitGrantAmount]" => "{hitableConfig.OnHitGrantAmount}"
+                "[OnHitGrantAmount]" => "{hitableConfig.OnHitGrantAmount}",
+                "[HitableLevel]" => "{hitableConfig.CurrentLevel}",
+                "[HitableXP]" => "{hitableConfig.CurrentXP}",
+                "[HitableMaxXP]" => "{hitableConfig.MaxXPForLevel}",
+                "[HitableReward]" => "{hitableConfig.CurrentReward}",
+                "[ComboTotal]" => "{hitableConfig.ComboAmount}"
             })
 
         return default
 
 
-    #Host the Shoot
     Host<override>()<suspends>:void=
         hitableConfig.Enable()
         loop:
@@ -53,11 +55,22 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
             if:
                 Player := player[Event]
                 Owner := MaybeOwner?
+                BaseReward := hitableConfig.CurrentReward
+                Rebirths := GetCoreStats[Player, Owner.Base_Setup.PersistenceCore].Rebirths
+                RebirthedReward := GetRebirthAmount[Owner, Rebirths, BaseReward]
             then:
                     Granter := hitableConfig.OptItemGranter
-                    GrantMoney(Owner, Player, hitableConfig.CurrencyOnHitID, hitableConfig.OnHitGrantAmount, BypassZone)
+                    
+                    GrantMoney(Owner, Player, hitableConfig.CurrencyOnHitID, RebirthedReward, BypassZone)
                     GrantXP(Owner, Player, hitableConfig.OnHitExperienceAmount)
                     Granter.GrantItem(Player)
+                    
+                    # Add rebirthed amount to combo
+                    hitableConfig.AddToCombo(RebirthedReward)
+                    hitableConfig.AddXP(1)
+                    spawn{hitableConfig.UpdateDisplayAsync()}
+                    
+                    # Show combo message
                     if:
                         OHudConfig := hitableConfig.OverrideHudConfig?
                     then:
@@ -83,24 +96,120 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
 
 unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
 
-    #The currency ID that will be granted to the player when the shooting range target is hit
     @editable var CurrencyOnHitID  : int = {0}
-
-    #The amount of money that will be granted to the player when the shooting range target is hit
-    @editable var OnHitGrantAmount : int = {0}
-
-    #The amount of experience that will be granted to the player when the NPC is killed
+    @editable var OnHitGrantAmount : int = {25}
     @editable var OnHitExperienceAmount : int = {0}
-    
-    #The item granter device that will be granted to the player when the NPC is killed
     @editable var OptItemGranter : item_granter_device = {item_granter_device{}}
+    @editable var hitdetectors : []trigger_device = array{}
+    @editable var OverrideHudConfig : ?hud_main = option{hud_main{OnFailedMessage := option{""}; OnSuccessMessage := option{"+[ComboTotal] (Lvl [HitableLevel])"}}}
 
-    #Shooting range target device that will be hit
-    @editable var  hitdetectors : []trigger_device = array{}
+    # Leveling system properties
+    @editable var MaxLevel : int = 10
+    @editable var BaseXPPerLevel : int = 10
+    @editable var XPScalingFactor : float = 1.5
+    @editable var RewardPerLevel : int = 5
+    @editable var LevelDisplay : billboard_device = billboard_device{}
+    @editable var ComboResetTime : float = 2.0
 
-    @editable var OverrideHudConfig : ?hud_main = option{hud_main{OnFailedMessage := option{""}; OnSuccessMessage := option{"+[OnHitGrantAmount(Param:RebirthValue)]"}}}
+    var CurrentLevel : int = 1
+    var CurrentXP : int = 0
+    var MaxXPForLevel : int = 10
+    var CurrentReward : int = 25
+    var Owner : ?base = false
+    var ComboAmount : int = 0
+    var ComboActive : logic = false
 
     OnHit : event(agent) = event(agent){}
+    ComboReset : event() = event(){}
+
+    # Calculate values for current level
+    CalculateLevelValues():void=
+        if(CurrentLevel >= MaxLevel):
+            set MaxXPForLevel = 999999
+        else:
+            BaseXP := BaseXPPerLevel * 1.0
+            LevelMult := (CurrentLevel - 1) * 1.0
+            if:
+                LevelFactor := Pow(XPScalingFactor, LevelMult)
+                Calculated := BaseXP * LevelFactor
+                FlooredValue := Floor[Calculated]
+            then:
+                set MaxXPForLevel = FlooredValue
+            else:
+                set MaxXPForLevel = BaseXPPerLevel
+        
+        LevelBonus := (CurrentLevel - 1) * RewardPerLevel
+        set CurrentReward = OnHitGrantAmount + LevelBonus
+
+    # Add XP and check for level up
+    AddXP<public>(Amount:int):void=
+        if(CurrentLevel >= MaxLevel){return}
+        
+        set CurrentXP += Amount
+        
+        if(CurrentXP >= MaxXPForLevel):
+            set CurrentLevel += 1
+            set CurrentXP = 0
+            CalculateLevelValues()
+
+    # Reset level (for rebirth)
+    ResetLevel<public>():void=
+        set CurrentLevel = 1
+        set CurrentXP = 0
+        set ComboAmount = 0
+        set ComboActive = false
+        CalculateLevelValues()
+        spawn{UpdateDisplayAsync()}
+
+    # Add to combo
+    AddToCombo<public>(Amount:int):void=
+        set ComboAmount += Amount
+        set ComboActive = true
+
+    # Reset combo
+    ResetCombo<public>():void=
+        set ComboAmount = 0
+        set ComboActive = false
+        ComboReset.Signal()
+
+    # Update the billboard display
+    UpdateDisplayAsync<public>()<suspends>:void=
+        Sleep(0.0)
+        if(CurrentLevel >= MaxLevel):
+            LevelDisplay.SetText(S2M("MAX LEVEL"))
+        else:
+            ProgressBar := CreateProgressBar(CurrentXP, MaxXPForLevel)
+            DisplayText := "Level {CurrentLevel}\n{ProgressBar}"
+            LevelDisplay.SetText(S2M(DisplayText))
+
+    # Create a simple text-based progress bar
+    CreateProgressBar(Current:int, MaxXP:int):string=
+        if(MaxXP <= 0):
+            return "██████████"
+        
+        BarLength := 10
+        Percentage := (Current * 1.0) / (MaxXP * 1.0)
+        FilledFloat := Percentage * BarLength * 1.0
+        
+        if:
+            FilledBlocks := Floor[FilledFloat]
+        then:
+            # Clamp between 0 and BarLength
+            FilledInt := if(FilledBlocks < 0){0}else if(FilledBlocks > BarLength){BarLength}else{FilledBlocks}
+            
+            var BarText : string = ""
+            var i : int = 0
+            loop:
+                if(i >= BarLength){break}
+                if(i < FilledInt):
+                    set BarText = "{BarText}█"
+                else:
+                    set BarText = "{BarText}_"
+                set i += 1
+            
+            return BarText
+        
+        return "__________"
 
     Disable<override>():void=
         for:
@@ -115,26 +224,40 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
             hitdetector.Enable()
 
     Initialize<override>(Base:base):void=
+        set Owner = option{Base}
+        CalculateLevelValues()
         Disable()
+        spawn{UpdateDisplayAsync()}
         spawn{MultiThreadHitDetector(Base)}
+        spawn{ManageComboTimer()}
+
     MultiThreadHitDetector(Base:base)<suspends>:void=
         for:
             hitdetector : hitdetectors
         do:
             spawn{ThreadedSys(hitdetector, Base)}
+
     ThreadedSys(hitdetector:trigger_device, Base:base)<suspends>:void=
         loop:
             race:
                 AwaitHit(Base, hitdetector)
                 OnHit.Await()
     
-    AwaitHit(Base:base, HD:trigger_device)<suspends>:void={
+    AwaitHit(Base:base, HD:trigger_device)<suspends>:void=
         MAgent := HD.TriggeredEvent.Await()
         if:
             Agent := MAgent?
         then:
             OnHit.Signal(Agent)
-    }
 
-
-
+    # Manage combo timer - resets combo after inactivity
+    ManageComboTimer<public>()<suspends>:void=
+        loop:
+            race:
+                block:
+                    OnHit.Await()
+                    Sleep(ComboResetTime)
+                    if(ComboActive?):
+                        ResetCombo()
+                block:
+                    ComboReset.Await()
