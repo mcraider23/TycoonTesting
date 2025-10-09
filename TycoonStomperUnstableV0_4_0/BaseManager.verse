@@ -138,8 +138,8 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
                 PlayerData := GetStats[Player]
             do:
                 Source := player_profile_data:
-                    MakePlayerProfileData<constructor>(PlayerData)
                     CoreSaves:=ChangeCoreSave(PlayerData.CoreSaves, X, core_save{})
+                    MakePlayerProfileData<constructor>(PlayerData)
                 if. set PlayerProfileDataMap[Player] = Source
                 if. DelidCurrencies[Player, Base_Setup.PersistenceCore]
                 
@@ -434,7 +434,4 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
                 "SizeLimit"=>"{SizeLimit}", 
                 "[Status]"=>"{Status.ToStr()}",
                 "[FailureReason]"=>"{CFR.ToStr()}"
-            }   
-           
-
-
+            }
