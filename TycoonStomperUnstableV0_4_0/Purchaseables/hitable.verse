@@ -104,7 +104,7 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
     @editable var OverrideHudConfig : ?hud_main = option{hud_main{OnFailedMessage := option{""}; OnSuccessMessage := option{"+[ComboTotal] (Lvl [HitableLevel])"}}}
 
     # Leveling system properties
-    @editable var MaxLevel : int = 10
+    @editable var MaxLevel : int = 10000
     @editable var BaseXPPerLevel : int = 10
     @editable var XPScalingFactor : float = 1.5
     @editable var RewardPerLevel : int = 5
