@@ -198,6 +198,30 @@ UpdateXP(P:player, XP:int, CoreSaveID:int)<transacts>:void=
         set PlayerProfileDataMap[P] = player_profile_data:
             CoreSaves:=ChangeCoreSave(Map.CoreSaves, CoreSaveID, NewSave)
             MakePlayerProfileData<constructor>(Map)
+
+# Update hitable progress in persistence
+UpdateHitableProgress(P:player, HitableKey:int, Level:int, XP:int, CoreSaveID:int)<transacts><decides>:void=
+    if:
+        P.IsActive[]
+        Map := PlayerProfileDataMap[P]
+    then:
+        if:
+            EstablishedSave := Map.CoreSaves[CoreSaveID]
+        then:
+            # Encode level and XP into single integer: Level * 10000 + XP
+            EncodedValue := (Level * 10000) + XP
+            
+            var PastCurrency : [int]int = Map.CoreSaves[CoreSaveID].AssociatedCurrencies
+            set PastCurrency[HitableKey] = EncodedValue
+
+            NewSave := core_save:
+                AssociatedCurrencies := PastCurrency
+                MakeCoreSave<constructor>(EstablishedSave)
+
+            set PlayerProfileDataMap[P] = player_profile_data:
+                CoreSaves:=ChangeCoreSave(Map.CoreSaves, CoreSaveID, NewSave)
+                MakePlayerProfileData<constructor>(Map)
+
 #Gets the associated currencies for a player
 GetStats(Agent:agent)<decides><transacts>:player_profile_data=
 {
