@@ -599,14 +599,15 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
 
 
     #Runs after the item is bought
+    # FIXED: Removed CanLoad check so all purchases get saved to persistence
     OnBought<public>(Agent:agent):void=
-        #If the player has enough money, the item is purchased, purchase zone is disabled and the player's stats are updated
         if:
             Player := player[Agent]
             Owner := MaybeOwner?
-            CanLoad?
         then:
-            set CanLoad = false
+            # Only set CanLoad to false if it was true (for the Load system)
+            if(CanLoad?){set CanLoad = false}
+            
             UpdateXP(Player, ExperiencePointsToAdd, Owner.Base_Setup.PersistenceCore)
             Accolade.Award(Player)
             GrantXP(Owner, Player, ExperiencePointsToAdd)
@@ -617,7 +618,7 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             
 
             OnBoughtEvent.Signal(Player)
-            Owner.NewItemBought .Signal(Self)
+            Owner.NewItemBought.Signal(Self)
 
             Result := UnlockDependents(Owner)
             if(Result(1)?){GlobalSuperlog("When Unlocking all dependents, ({Result(0)}) failed to unlock")}
@@ -626,7 +627,10 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             VFX.OnEvent(Player)
             SFX.OnEvent(Player)
             BillboardConfig.Hide()
+            
+            # THIS NOW SAVES EVERY PURCHASE TO PERSISTENCE
             UpdateAssociatedUnlocks(Player, Ptype, MyIndex, Owner.Base_Setup.PersistenceCore)
+            
     FirstBought(Agent:agent):void=
         if:
             Player := player[Agent]
