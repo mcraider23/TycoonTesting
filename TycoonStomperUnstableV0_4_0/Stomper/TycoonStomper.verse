@@ -107,7 +107,7 @@ tycoon_stomper <public> := class(creative_device):
             FillRandomBase(Player)
             
 
-    FillRandomBase(Player:player):void=
+    FillRandomBase(Player:player)<suspends>:void=
         if{FreeBase:=UnclaimedBases[GetRandomInt(0, UnclaimedBases.Length-1)]}
         then{FreeBase.OnBought(Player)}
 

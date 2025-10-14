@@ -168,78 +168,75 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
         Initialize(Self, IX)
 
         
-    OnBought(Agent:agent):void=
+    OnBought(Agent:agent)<suspends>:void=
         InitializeAgent(Agent)
-            Print("Attempting to claim base")
-            Base_Setup.BillBoardConfig.Instantiate()
+        Print("Attempting to claim base")
+        Base_Setup.BillBoardConfig.Instantiate()
+        if:
+            AttemptClaimBase[Agent]
+            Status = ClaimStatus.Unclaimed
+            Player := player[Agent]
+            TempStats := Owner.GetPlayerStats[Player]
+            TempStats.ClaimBase[Self]
+            PlayerStats := GetCoreStats[Player, Base_Setup.PersistenceCore]
+            AssociatedUnlocks := PlayerStats.AssociatedUnlocks
+        then:
             if:
-                AttemptClaimBase[Agent]
-                Status = ClaimStatus.Unclaimed
-                Player := player[Agent]
-                TempStats := Owner.GetPlayerStats[Player]
-                TempStats.ClaimBase[Self]
-                PlayerStats := GetCoreStats[Player, Base_Setup.PersistenceCore]
-                AssociatedUnlocks := PlayerStats.AssociatedUnlocks
+                not RootPlayer?
             then:
-                if:
-                    not RootPlayer?
-                then:
-                    set RootPlayer = option{Player}
-                set Owner.UnclaimedBases = Owner.UnclaimedBases.RemoveAllElements(Self)
-                Base_Setup.PurchaseableConfigs.Purchase_Zone.OnSuccess(Player, false)
-                for(I ->IGifts: Gifts){IGifts.InitGiftable(Player)}
-                Base_Setup.VFX.OnEvent(Player)
-                Owner.Config.Superlog("Player has {PlayerStats.Rebirths} Rebirths")
-                
-                for(Collectable:Collectables){Collectable.Show(Self)}
-                Base_Setup.HudConfig.Initialize(Self)
-                Base_Setup.HudConfig.OnSuccessfullPlayer(Player)
-                UI := currency_ui{Player:=Player,  Configs:=UIConfig, owner:=Self}
-                UI.Create()
-                spawn{AwaitUIDestroy(UI)}
-                if:
-                    Base_Setup.PersistUnlocks?
-                then:
-                    for:
-                        AUnoock:AssociatedUnlocks
-                    do:
-                        Load(Self, AUnoock(0), AUnoock(1))
-                else if:
-                    DelidUnlocks[Player, Base_Setup.PersistenceCore]
-                
-                if:
-                    Players.Length < SizeLimit
-                then:
-                    GlobalSuperlog("Still in the size limit")
-                else:
-                    Base_Setup.PurchaseableConfigs.Purchase_Zone.Hide(true)
-                    Base_Setup.BillBoardConfig.Hide()
-
-                AttemptedBaseClaim.Signal()
-
-
-                    
-                
-                
-
-                    
+                set RootPlayer = option{Player}
+            set Owner.UnclaimedBases = Owner.UnclaimedBases.RemoveAllElements(Self)
+            Base_Setup.PurchaseableConfigs.Purchase_Zone.OnSuccess(Player, false)
+            
+            # CRITICAL FIX: Load unlocks FIRST before showing anything!
+            if:
+                Base_Setup.PersistUnlocks?
+            then:
+                GlobalSuperlog("=== LOADING UNLOCKS FROM PERSISTENCE ===")
+                for:
+                    AUnoock:AssociatedUnlocks
+                do:
+                    Load(Self, AUnoock(0), AUnoock(1))
+                GlobalSuperlog("=== FINISHED LOADING UNLOCKS ===")
             else if:
-                Player := player[Agent]
+                DelidUnlocks[Player, Base_Setup.PersistenceCore]
+            
+            # NOW show everything else AFTER loading
+            for(I ->IGifts: Gifts){IGifts.InitGiftable(Player)}
+            Base_Setup.VFX.OnEvent(Player)
+            Owner.Config.Superlog("Player has {PlayerStats.Rebirths} Rebirths")
+            
+            for(Collectable:Collectables){Collectable.Show(Self)}
+            Base_Setup.HudConfig.Initialize(Self)
+            Base_Setup.HudConfig.OnSuccessfullPlayer(Player)
+            UI := currency_ui{Player:=Player,  Configs:=UIConfig, owner:=Self}
+            UI.Create()
+            spawn{AwaitUIDestroy(UI)}
+            
+            if:
+                Players.Length < SizeLimit
             then:
-                if:
-                    not AttemptClaimBase[Player]
-                then:
-                    set CFR = ClaimFauilreReason.TooManyPlayers
-                else if:
-                    TempStats := Owner.GetPlayerStats[Player]
-                    not TempStats.ClaimBase[Self]
-                then:
-                    set CFR = ClaimFauilreReason.AlreadyOwnsBase
+                GlobalSuperlog("Still in the size limit")
+            else:
+                Base_Setup.PurchaseableConfigs.Purchase_Zone.Hide(true)
+                Base_Setup.BillBoardConfig.Hide()
 
+            AttemptedBaseClaim.Signal()
+        else if:
+            Player := player[Agent]
+        then:
+            if:
+                not AttemptClaimBase[Player]
+            then:
+                set CFR = ClaimFauilreReason.TooManyPlayers
+            else if:
+                TempStats := Owner.GetPlayerStats[Player]
+                not TempStats.ClaimBase[Self]
+            then:
+                set CFR = ClaimFauilreReason.AlreadyOwnsBase
 
-                
-                Base_Setup.HudConfig.OnFailurePlayer(Player)
-                Print("Base is already claimed or size limit was reached (Status: [== {CFR.ToStr()} ==]")
+            Base_Setup.HudConfig.OnFailurePlayer(Player)
+            Print("Base is already claimed or size limit was reached (Status: [== {CFR.ToStr()} ==]")
 
     #Waits for a player to enter the base and attempts to claim it.
     AwaitBaseClaim(IX:int)<suspends>:void=

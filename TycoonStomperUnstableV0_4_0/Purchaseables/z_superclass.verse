@@ -191,7 +191,9 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         set MaybeOwner = option{Hostess}
         Purchase_Zone.Initialize(Hostess, DefaultAltClaim)
         InitializeFX()
-        BillboardConfig.Instantiate()
+        # Only show billboard if item hasn't been purchased yet
+        if(IsPurchased = PurchasedStatus.NotPurchased):
+            BillboardConfig.Instantiate()
         spawn{AwaitAttemptedPurchase(Purchase_Zone, Hostess)}
         OnInitalized.Signal()
         SetOwnerEvent.Signal(Hostess)
@@ -630,6 +632,37 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             
             # THIS NOW SAVES EVERY PURCHASE TO PERSISTENCE
             UpdateAssociatedUnlocks(Player, Ptype, MyIndex, Owner.Base_Setup.PersistenceCore)
+
+# NEW METHOD: Loads a purchased item from persistence
+    LoadFromPersistence<public>(Player:player):void=
+        GlobalSuperlog("=== LOADING {Name} FROM PERSISTENCE ===")
+        
+        # Mark the item as purchased FIRST (this stops the purchase loop)
+        set IsPurchased = PurchasedStatus.Purchased
+        
+        # Set CanLoad to false so OnBought won't run if triggered
+        set CanLoad = false
+        
+        # CRITICAL: Signal BegunHosting FIRST to stop SubHost loops
+        BegunHosting.Signal()
+        
+        # Disable the purchase zone completely
+        Purchase_Zone.Disable()
+        
+        # Hide the purchase zone by moving it far away
+        Purchase_Zone.Hide(true)
+        
+        # Set the zone status to disabled
+        set Purchase_Zone.Status = LogicalStatus.Disabled
+        
+        # Hide the billboard
+        BillboardConfig.Hide()
+        
+        # Start the money grant interval and host functions
+        spawn{OnGrantInterval(Player)}
+        spawn{ManageHost()}
+        
+        GlobalSuperlog("=== SUCCESSFULLY LOADED {Name} ===")
             
     FirstBought(Agent:agent):void=
         if:

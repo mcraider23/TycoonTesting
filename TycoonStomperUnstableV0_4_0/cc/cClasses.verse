@@ -431,4 +431,3 @@ custom_waypointable_config<public>:=class<concrete>():
 
 
 
-

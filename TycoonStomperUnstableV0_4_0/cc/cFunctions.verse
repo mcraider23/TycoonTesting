@@ -182,15 +182,17 @@ HasZone(Base:base, ID:int)<decides><transacts>:void=
         
     }
 
-Load<public>(B:base, Purchaseable:PurchaseableType, I:int):void=
-        if:
-            Player := B.Players[0]
-            PurchaseableData := FetchPurchaseableFromPtypeDex[Purchaseable, B, I]
-        then:
-            PurchaseableData(0).Load(Player)
-
-
-(Item:purchaseable).Load(Player:player):void={Item.OnBought(Player)}
+# FIXED LOAD FUNCTION - Properly loads purchased items from persistence
+Load<public>(B:base, Purchaseable:PurchaseableType, I:int)<suspends>:void=
+    if:
+        Player := B.Players[0]
+        PurchaseableData := FetchPurchaseableFromPtypeDex[Purchaseable, B, I]
+        Item := PurchaseableData(0)
+    then:
+        # Call the item's LoadFromPersistence method
+        Item.LoadFromPersistence(Player)
+    else:
+        GlobalSuperlog("Failed to load {Purchaseable.ToStr()} at index {I} - item not found")
 
         
 

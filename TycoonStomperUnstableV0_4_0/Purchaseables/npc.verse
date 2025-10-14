@@ -72,11 +72,3 @@ unique_npc_spawner<public>:=class<concrete>(Toggleable, Inaugurable):
                 Agent := InteractionResult.Source?
             then:
                 OnKill.Signal(Agent)
-
-                
-
-
-
-
-
-
