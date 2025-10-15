@@ -3,26 +3,6 @@ using { /Fortnite.com/Devices }
 using { /UnrealEngine.com/Temporary/SpatialMath }
 using {cc}
 
-#This script is a template for creating purchasable items in the game. 
-#It is a parent class for all purchasable items and contains all the necessary methods and properties for a purchasable item.
-#It inherits from the Detailable, Hostable,  SuperInaugurable, and Rebirthable interfaces.
-#The following are the most important properties and methods:
-# - Initialize method -> initializes the item and calls the parent class's Initialize method through the super keyword
-# - Host method -> runs async after the item is bought
-# - OnBought method -> runs after the item is bought
-# - OnGrantInterval method -> grants the player money on an interval
-
-# - Unlock method -> unlocks the item
-# - UnlockDependents method -> unlocks all dependents of the item
-# - TestAndCommitPurchase method -> checks if the player has enough money along with other requirements before purchasing
-
-
-
-# - AwaitAttemptedPurchase method -> awaits the player to enter the purchase zone
-# - HideProps method -> hides the props associated with the item
-# - ShowProps method -> shows the props associated with the item
-
-
 purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Rebirthable, SubHostable, IntegralFX, Gated, StringReturnables):
     var ID <public> : string = ""
     var OnInitalized <public> : event() = event(){}
@@ -44,79 +24,27 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
     var RebirthedEvent <public> : event() = event(){}
 
     @editable {ToolTip:=NameTT} var  Name <public>:  string = "My item name here"
-    # The name of the item
-    
     @editable var  Description <public>: string = "My \nmulti line \nitem description here"
-    # The description of the item
-    
     @editable var  Price <public>: int = {0}
-    # The price of the item
-    
     @editable var  ExperiencePointsToAdd  : int = {0}
-    # The amount of experience points to add when the item is purchased
-    
     @editable {ToolTip:=CurrenySpendTT} var  CurrencyToSpendID  <public>: int = {0}
-    # The ID of the currency to spend when purchasing the item
-    
     @editable var  CurrencyToReceiveID  <public>: int = {0}
-    # The ID of the currency to receive when purchasing the item
-    
     @editable var  GrantAmount <public>: int = {0}
-    # The amount to grant to the player when the item is purchased
-    
     @editable {ToolTip:=GrantIntervalTT} var  GrantInterval : ?float = option{15.0}
-    # The interval at which to grant the player the grant amount
-
-    
     @editable {ToolTip:=StartAsTT} var  StartAs <public> : Dependency = Dependency.Unlocked
-    # The initial status of the item (locked or unlocked)
-
     @editable var  Accolade: accolades_device = accolades_device{}
-    # The accolade associated with the item
-    
     @editable var  OnUnlockCinematic : cinematic_sequence_device = cinematic_sequence_device{}
-    # The cinematic sequence to play when the item is unlocked
-    
     @editable var  OnPurchaseCinematic : cinematic_sequence_device = cinematic_sequence_device{}
-    # The cinematic sequence to play when the item is purchased
-    
     @editable {ToolTip:=BypassZoneTT} var  BypassZone <public> : logic = {false}
-    # Whether to bypass the purchase zone when buying the item
-    
     @editable var  UnlockTheseItems : []purchase_set = array{}
-    # The items that should be unlocked when this item is purchased
-
     @editable var PropsV2 : []TWC_unique_prop = array{}
-    # The props associated with the item
-
     @editable var AnimationConfig <public> : animation_main = animation_main{}
-    # The animation configuration for the item
-    
     @editable var  HudConfig : hud_main = hud_main{OnFailedMessage := option{"You need [MoneyNeeded] more to purchase [Name]"}; OnSuccessMessage := option{"Succsessfully Purchased [Name]"}}
-    # The HUD configuration for the item
-
     @editable var BillboardConfig : billboard_main = billboard_main{}
-    # The billboard configuration for the item
-    
     @editable var  ConditionsToBuy : condition = condition{}
-    # The conditions that must be met in order to buy the item
-    
     @editable var  Purchase_Zone <public> : anyzone_or_atm = anyzone_or_atm{}
-    # The purchase zone associated with the item
-    
     @editable var  VFX : vfx_main = vfx_main{}
-    # The visual effects for the item
-
     @editable var SFX : sfx_main = sfx_main{}
-    # The sound effects for the item
-    
-
-
-
-
-    #*********************#
-    #  Interface methods  #
-    #*********************#    
 
     OnRebirth<override>():void=
         RebirthedEvent.Signal()
@@ -131,23 +59,18 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             Purchase_Zone.Enable()
             Purchase_Zone.Show()
             spawn{SubHost()}
-        else:
-            # CRITICAL FIX: Also restart SubHost for items that were never purchased
-            spawn{SubHost()}
-            
+        
         if:
             StartAs = Dependency.Unlocked
             Owner := MaybeOwner?
         then:
             InitializeChildren(Owner, MyIndex)
         else:
-            GlobalSuperlog("{Name} is locked. Not initializing children... --->> Awaiting until unlocked.")
+            GlobalSuperlog("{Name} is locked after rebirth. Not initializing children.")
 
-    #Prints the item's details
     Detail<override>(Type:string)<transacts>:void=
         GlobalSuperlog("==[{Type}]==")
 
-    #Initializes the item
     Initialize<override>(Hostess:base, I:int):void=
         GlobalSuperlog("Initializing {Name}...")
         VFX.OnBegin(-1)
@@ -156,13 +79,18 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         BillboardConfig.Initialize(Self)
         HudConfig.Initialize(Self)
         SetupPropsV2()
+        
+        # Initialize TWC props to hide them on game start
+        for:
+            TWC:PropsV2
+        do:
+            TWC.Initialize(Self)
+        
         set InitialStatus = StartAs
         set MyIndex = I
         set MaybeOwner = option{Hostess}
         spawn{SubHost()}
         set Purchase_Zone.Origin = Purchase_Zone.Zone.GetTransform().Translation
-
-           
         spawn{Purchase_Zone.AwaitUnlock(Self)}
         
         if:
@@ -175,29 +103,26 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             StartAs = Dependency.Unlocked
         then:
             InitializeChildren(Hostess, I)
-            GlobalSuperlog("Initing CHildren for {Name}")
+            GlobalSuperlog("Initialized children for {Name}")
         else:
-            GlobalSuperlog("{Name} is locked. Not initializing children... --->> Awaiting until unlocked.")
+            GlobalSuperlog("{Name} is LOCKED on init. Not initializing children.")
 
-
-
-        
-
-
-            
-                    
     InitializeChildren(Hostess:base, I:int):void=
         set CanLoad = true
         set MaybeOwner = option{Hostess}
         Purchase_Zone.Initialize(Hostess, DefaultAltClaim)
         InitializeFX()
-        # Only show billboard if item hasn't been purchased yet
+        
+        # Only show billboard if NOT already purchased
         if(IsPurchased = PurchasedStatus.NotPurchased):
             BillboardConfig.Instantiate()
+        else:
+            GlobalSuperlog("{Name} already purchased - hiding billboard")
+            BillboardConfig.Hide()
+        
         spawn{AwaitAttemptedPurchase(Purchase_Zone, Hostess)}
         OnInitalized.Signal()
         SetOwnerEvent.Signal(Hostess)
-
 
     ManageHost()<suspends>:void=
         race:
@@ -206,22 +131,13 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             block:
                 RebirthedEvent.Await()
 
-
-    #Runs after the item is bought
-    #This method is meant to be overridden by the child class
-    #It runs after the item is bought and is meant to be used for any async code that needs to run after the item is bought
     Host<override>()<suspends>:void
 
-
-    #Runs async before the item is bought (Ensure you cancel any functions you spawn here after a purchase is made or you'll have a MEMORY LEAK when players rebirth)
-    # You can cancel the functions you spawn here by simply racing them with the BegunHosting.Await() event
-    # Look at ManagePrePurchaseProps for an example.
     SubHost<override>()<suspends>:void=
         for:
             TWC:PropsV2
         do:
             spawn{ManageTWC(TWC)}
-            
 
     ManageTWC(TWC:TWC_unique_prop)<suspends>:void=
         race:
@@ -230,7 +146,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                 ManagePostPurchaseSet(TWC)
             RebirthedEvent.Await()
 
-           
     ManagePostPurchaseSet<public>(TWC:TWC_unique_prop)<suspends>:void=
         race:
             block:
@@ -247,9 +162,7 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                     TWC.Hide(AnimationConfig)
                 }
 
-                        
     ManagePrePurchasePropSet<public>(TWC:TWC_unique_prop)<suspends>:void=
-        TWC.Initialize(Self)
         case(TWC.PrePurchaseFunction)
         {
         PropMovementType.Nothing =>
@@ -267,35 +180,29 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                         set SetTimeOut = TimeOut
                     then:
                         GlobalSuperlog("Using Timeout for {SetTimeOut}")
+                    
+                    # Check lock status FIRST
                     if:
-                        StartAs = Dependency.Unlocked
-                    then:
-                        if:
-                            IsPurchased = PurchasedStatus.NotPurchased
-                        then:
-                        
-                            spawn. TWC.Show(AnimationConfig)
-
-                            if:
-                                Player := Owner.Players[0]
-                                MeetsConditions[Owner, ConditionsToBuy, Player, CurrencyToSpendID]
-                                CanBuy[Owner, Player, Self]
-                                TWC.SwitchToGreen[]
-                                
-                            else if:
-                                TWC.SwitchToRed[]
-
-                                
-
-                        else if:
-                            IsPurchased = PurchasedStatus.Purchased
-                        then:
-                            TWC.Hide(AnimationConfig)
-                    else if:
                         StartAs = Dependency.Locked
                     then:
-                        Print("Hiding {Name} for being locked")
                         TWC.Hide(AnimationConfig)
+                    else if:
+                        IsPurchased = PurchasedStatus.Purchased
+                    then:
+                        TWC.Hide(AnimationConfig)
+                    else if:
+                        StartAs = Dependency.Unlocked
+                        IsPurchased = PurchasedStatus.NotPurchased
+                    then:
+                        spawn. TWC.Show(AnimationConfig)
+
+                        if:
+                            Player := Owner.Players[0]
+                            MeetsConditions[Owner, ConditionsToBuy, Player, CurrencyToSpendID]
+                            CanBuy[Owner, Player, Self]
+                            TWC.SwitchToGreen[]
+                        else if:
+                            TWC.SwitchToRed[]
 
                     race:
                         Owner.MoneyGranted.Await()
@@ -310,9 +217,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                 RebirthedEvent.Await()
             }
         }
-            
-       
-    
 
     SetupPropsV2<public>():void=
         for:
@@ -329,9 +233,7 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             else:
                 Print("Already has Origin Props")
         return
-        
-                    
-    #Intergral FX System methods
+
     InitalizeVisuals<override>():void=
         if.  Owner := MaybeOwner?
         then:
@@ -378,22 +280,10 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             if:
                 RebirthsLeft := ConditionsToBuy.MinRebirths - Stats.Rebirths
                 set default["[RebirthsLeft]"] = "{RebirthsLeft}"
-
-
-            
         
         return default
 
-        
-    #*********************#
-    #    Class methods    #
-    #*********************#       
-    #Unlocks all dependents of the item
-    #Returns the number of failures and a boolean indicating if there were any failures
-    #The failures are the number of dependents that failed to unlock
-    #The boolean indicates if any dependents failed to unlock
     UnlockDependents(Base:base):tuple(int, logic)=
-        #Not using the decides / transacts effects so we dont rollback all the other unlocks that were successful.
         var anyfailures:logic=false
         var failures:int=0
         for:
@@ -409,17 +299,7 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                 UnlockFailure(ItemSet.Index, ItemSet.Type.ToStr())
         (failures, anyfailures)
 
-
-
-
-
-
-
-    #Unlocks the item
-    #If the item is locked, unlock it else fail
-    #If the item is unlocked, play the unlock cinematic and unlock all dependents
     Unlock<override>():void=
-        #if the item is locked, unlock it else fail
         if:
             StartAs = Dependency.Locked
             Owner := MaybeOwner?
@@ -431,8 +311,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         else:
             return
 
-        
-        #If the item is unlocked, play the unlock cinematic and unlock all dependents
         if.  Owner := MaybeOwner?
         then{
         for:
@@ -442,7 +320,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         return}
 
     Lock<override>():void=
-        #if the item is locked, unlock it else fail
         if:
             StartAs = Dependency.Unlocked
         then:
@@ -451,45 +328,21 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         else:
             return
 
-
-    #Cheks if the player has enough money to purchase the item and other requirements are met before committing the purchase.
-    #If the player has enough money, the item is purchased, purchase zone is disabled and the player's stats are updated
-    #If the player does not have enough money, the purchase fails
-    #If the item is locked, the purchase fails
     TestAndCommitPurchase(Agent:agent)<decides><transacts>:void=
         GlobalSuperlog("== Attempting Purchase == ")
-        #Gets the player's stats
         Player:=player[Agent]
         Owner := MaybeOwner?
         Stats := PlayerStats := GetCoreStats[Player, Owner.Base_Setup.PersistenceCore]
-        #Gets the player's money associated with the CurrencyToSpendID
-        
-
-        #Check if the player is in the base
         Owner.Players.Find[Player]
-
         AssociatedCurrencies := Stats.AssociatedCurrencies
-        #Gets the player's money associated with the CurrencyToReceiveID
         MoneyAssociatedWith_ToSpendID := AssociatedCurrencies[CurrencyToSpendID]
-        
-        #Checks if the player has enough money to purchase the item
         MoneyAssociatedWith_ToSpendID >= Price
-
         MeetsConditions[Owner, ConditionsToBuy, Player, CurrencyToSpendID]
-
-        #Checks if the item is unlocked
         StartAs = Dependency.Unlocked
-
-        #If the player has enough money, the item is purchased, purchase zone is disabled and the player's stats are updated
         RemoveMoney(Owner, Player, CurrencyToSpendID, Price)
-
-        #Adds money to the player's CoinDex for the CurrencyToReceiveID
         MoneyAssocatiedWith_ToReceiveID := AssociatedCurrencies[CurrencyToReceiveID]
-        
         return
     
-    
-    #Grants the player money and experience points on an interval
     OnGrantInterval(Agent:agent)<suspends>:void=
         GlobalSuperlog("-Granting Money on Interval")
         if(GA := GrantInterval?;  Owner := MaybeOwner?){if(Owner.MoneyLeague.Update[Owner, CurrencyToReceiveID, GrantAmount, GA]){GlobalSuperlog("Updated MoneyLeague using: {Name}")}}
@@ -505,17 +358,8 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             then:
                 Sleep(Interval+0.0)
                 GrantMoney(Owner, Player, CurrencyToReceiveID, GrantAmount, BypassZone)   
-                
-                
             else{GlobalSuperlog("No interval set for: {Name}; or interval is less than 0.0; returning..."); return}
-                    
-        
 
-        
-            
-
-   
-    #Awaiting the player to enter the purchase zone. 
     AwaitAttemptedPurchase(PZ:anyzone_or_atm, Hostess:base)<suspends>:void=
         GlobalSuperlog("Awaiting Attempted Purchase for {Name}")
         race:
@@ -538,7 +382,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             Player := player[Agent]
             PlayerStats := Owner.Owner.GetPlayerStats[Player]
             TestAndCommitPurchase[Agent] or DefaultAltClaim? and not PlayerStats.HasClaimedBase?
-            
             IsPurchased = PurchasedStatus.NotPurchased
         then:
             OnPurchaseSuccess(Player)
@@ -552,29 +395,14 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                 Purchase_Zone.Enable(); 
                 HudConfig.OnFailurePlayer(Player)
 
-            
     RetryPurchase<public>(Agent:agent)<suspends>:logic=
-        RetryPeriod : float = 1.0  # Total time to span retries
-        X: int = 5                 # Number of retries
-
-        #Calculate base delay time using exponential backoff
-        base_delay : float = RetryPeriod / Pow(2.0,X*1.0 - 1.0) 
-
-        #60.0 / (2.0 ^ 5 - 1.0) = 60.0 / 31.0 = 1.93548387097
-        
-        #1.93548387097, 3.87096774194, 7.74193548387, 15.4838709677, 30.9677419355
-        # Loop for X retries
-
-        # Loop for X retries
+        RetryPeriod : float = 1.0
+        X: int = 5
+        base_delay : float = RetryPeriod / Pow(2.0,X*1.0 - 1.0)
         race:
             block:
                 for(i := 1..X):
-                    # Calculate the delay for this iteration
                     delay_time : float = base_delay * Pow(2.0, (i*1.0-1.0))
-                    
-                    # Perform the retry action here
-                    # Example: RetryAction(agent)
-                    # Suspend the function for the calculated delay time
                     Sleep(delay_time)
                     if:
                         TestAndCommitPurchase[Agent]
@@ -585,7 +413,6 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
                 return false
             block:
                 RebirthedEvent.Await()
-
         return false
 
     OnPurchaseSuccess(P:player):void=
@@ -597,18 +424,13 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             OnBought(P)
             FirstBought(P)
 
-
-
-
-    #Runs after the item is bought
-    # FIXED: Removed CanLoad check so all purchases get saved to persistence
     OnBought<public>(Agent:agent):void=
         if:
             Player := player[Agent]
             Owner := MaybeOwner?
         then:
-            # Only set CanLoad to false if it was true (for the Load system)
-            if(CanLoad?){set CanLoad = false}
+            # Always save purchases to persistence (even when loading)
+            UpdateAssociatedUnlocks(Player, Ptype, MyIndex, Owner.Base_Setup.PersistenceCore)
             
             UpdateXP(Player, ExperiencePointsToAdd, Owner.Base_Setup.PersistenceCore)
             Accolade.Award(Player)
@@ -617,53 +439,42 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             
             Purchase_Zone.OnSuccess(Player, true)
             Purchase_Zone.Disable()
-            
+            BillboardConfig.Hide()
 
             OnBoughtEvent.Signal(Player)
             Owner.NewItemBought.Signal(Self)
 
+            # ALWAYS unlock dependents (even when loading from persistence)
+            # This ensures dependent items are available after reload
             Result := UnlockDependents(Owner)
             if(Result(1)?){GlobalSuperlog("When Unlocking all dependents, ({Result(0)}) failed to unlock")}
-            spawn{OnGrantInterval(Agent)}
-            spawn{ManageHost()};  BegunHosting.Signal()
-            VFX.OnEvent(Player)
-            SFX.OnEvent(Player)
-            BillboardConfig.Hide()
             
-            # THIS NOW SAVES EVERY PURCHASE TO PERSISTENCE
-            UpdateAssociatedUnlocks(Player, Ptype, MyIndex, Owner.Base_Setup.PersistenceCore)
+            # Only start money generation and hosting if NOT loading
+            if(not CanLoad?):
+                spawn{OnGrantInterval(Agent)}
+                spawn{ManageHost()}
+                BegunHosting.Signal()
+                VFX.OnEvent(Player)
+                SFX.OnEvent(Player)
+            else:
+                # Loading from persistence - start these too but mark CanLoad as false
+                set CanLoad = false
+                spawn{OnGrantInterval(Agent)}
+                spawn{ManageHost()}
+                BegunHosting.Signal()
 
-# NEW METHOD: Loads a purchased item from persistence
+    # Method called when loading an item from persistence
     LoadFromPersistence<public>(Player:player):void=
         GlobalSuperlog("=== LOADING {Name} FROM PERSISTENCE ===")
         
-        # Mark the item as purchased FIRST (this stops the purchase loop)
-        set IsPurchased = PurchasedStatus.Purchased
+        # Set CanLoad to true so OnBought knows this is a load operation
+        set CanLoad = true
         
-        # Set CanLoad to false so OnBought won't run if triggered
-        set CanLoad = false
+        # Call OnBought to set everything up (it WILL unlock dependents)
+        OnBought(Player)
         
-        # CRITICAL: Signal BegunHosting FIRST to stop SubHost loops
-        BegunHosting.Signal()
-        
-        # Disable the purchase zone completely
-        Purchase_Zone.Disable()
-        
-        # Hide the purchase zone by moving it far away
-        Purchase_Zone.Hide(true)
-        
-        # Set the zone status to disabled
-        set Purchase_Zone.Status = LogicalStatus.Disabled
-        
-        # Hide the billboard
-        BillboardConfig.Hide()
-        
-        # Start the money grant interval and host functions
-        spawn{OnGrantInterval(Player)}
-        spawn{ManageHost()}
-        
-        GlobalSuperlog("=== SUCCESSFULLY LOADED {Name} ===")
-            
+        GlobalSuperlog("=== FINISHED LOADING {Name} ===")
+
     FirstBought(Agent:agent):void=
         if:
             Player := player[Agent]
@@ -673,56 +484,24 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             Print("|==|----[{Name} ]----|==|")
             Print("|==|----[ Successfully Purchased ]----|==|")
 
-
-
-
-
-
-    
-        
     PoorsMansInit<public>():SuperInaugurable=
         Self
 
-#Example of how to create a purchasable item using the purchaseable superclass as a parent class. 
-#This class is a template for creating purchasable items in the game.
-#It inherits from the purchaseable class and contains all the necessary methods and properties for a purchasable item.
-
-
-#It contains the following properties and methods:
-# - Initialize method -> initializes the item and calls the parent class's Initialize method through the super keyword
-# - Host method -> runs after the item is bought
 basic_prop_buyable<public>:=class<concrete><final>(purchaseable):
-
     var Ptype <override> :  PurchaseableType = PurchaseableType.BasicProp
 
-    #Initializes the item
     Initialize<override>(Hostess:base, I:int):void=
-        
-        #Calls the parent class's Initialize method and waits for it to finish
         (super:)Initialize(Hostess, I)
-        
-        #Lists out all the properties of the item
         Detail("BasicPropBuyable")
 
-
-    #Runs after the item is bought
     Host<override>()<suspends>:void=
-        #My async code here
         loop:
             Sleep(Inf);
 
-
-#Example of how to create a second superclass for purchasable items using the purchaseable superclass as a parent class.
-#This one is a purchaseable where the fx should react off of the child class' events.
 fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
-    
     @editable var FXMain  <public> :  fx_main = fx_main{}
-
     TrigEvent : event() = event(){}
     var FirstPlayerOnTeam: ?player = false
-
-
-    #FX System methods from the ExpandedFX interface
 
     InitalizeVisuals<override>():void=
         if:
@@ -773,7 +552,6 @@ fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
         VFX.EndEvent()
         FXMain.EventBasedVFX.EndEvent()
 
-
     PlayAudibles<override>():void=
         if:
             Player := FirstPlayerOnTeam?
@@ -784,7 +562,6 @@ fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
     StopAudibles<override>():void=
         SFX.EndEvent()
         FXMain.EventBasedSFX.EndEvent()
-
 
     OnEvent()<suspends>:void=
         TrigEvent.Signal()
@@ -805,5 +582,4 @@ fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
                 block: 
                     TrigEvent.Await()
         
-    #Custom class methods
     AsyncPlayFX(Time:float)<suspends>:void={PlayFX(); Sleep(Time); StopFX(); return}
