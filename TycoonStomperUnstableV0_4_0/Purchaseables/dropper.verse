@@ -41,9 +41,11 @@ purchaseable_dropper<public>:=class<concrete>(purchaseable):
     OnRebirth<override>():void=
         (super:)OnRebirth()
 
+        # Clean up all spawned props from this dropper
+        WaypointableConfig.CleanupAllProps()
+
         if:
             Waypoint := iWaypoint?
         then:
             Waypoint.Unlink(WaypointableConfig)
             set iWaypoint = {false}
-

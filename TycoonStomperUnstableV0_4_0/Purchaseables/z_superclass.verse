@@ -54,6 +54,18 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         if:
             IsPurchased = PurchasedStatus.Purchased
         then:
+            # Hide all TWC props before resetting
+            for:
+                TWC:PropsV2
+            do:
+                # Hide using animation config (this also sets Status internally)
+                TWC.Hide(AnimationConfig)
+                # Also explicitly hide each prop to be sure
+                for:
+                    Prop:TWC.props
+                do:
+                    Prop.Hide()
+            
             set CanLoad = true
             set IsPurchased = PurchasedStatus.NotPurchased
             Purchase_Zone.Enable()
