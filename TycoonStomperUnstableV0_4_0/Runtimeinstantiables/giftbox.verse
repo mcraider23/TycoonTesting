@@ -66,8 +66,13 @@ giftbox_device := class<concrete>(Inaugurable):
     var GiftBoxDurationsPerAgent : [agent][]int = map{}
 
     var GiftBoxAnimationKeyFrames : []keyframe_delta = array{}
+    
+    # Flag to ensure only ONE timer loop runs
+    var TimerLoopStarted : logic = false
 
     Initialize<override>(Base:base):void=
+        Print("=== Initializing Giftbox for base {Base.Base_Setup.Name} ===")
+        
         GiftBoxButton.InteractedWithEvent.Subscribe(OnGiftBoxButtonInteracted)
         WaitKeyFrame: keyframe_delta = keyframe_delta
         {
@@ -113,11 +118,22 @@ giftbox_device := class<concrete>(Inaugurable):
         for (PlayerSpawner : PlayerSpawners):
             PlayerSpawner.SpawnedEvent.Subscribe(OnPlayerSpawned)
 
-        spawn{AsyncTickPerSecond()}
+        # CRITICAL: Only start the timer loop ONCE
+        if (not TimerLoopStarted?):
+            set TimerLoopStarted = true
+            spawn{AsyncTickPerSecond()}
+            Print("Timer loop started - this should only happen ONCE per giftbox")
 
     AsyncTickPerSecond()<suspends>:void=
+        Print("=== TIMER LOOP STARTED ===")
+        var LoopCount : int = 0
         loop:
             Sleep(1.0)
+            set LoopCount += 1
+            
+            # Debug every 10 seconds
+            if (Mod[LoopCount, 10] = 0):
+                Print("Timer loop running - tick #{LoopCount}")
 
             Players := owner.Players
             for (Player : Players, GiftBoxCanvas : canvas = GiftBoxCanvasPerAgent[Player]):
@@ -134,7 +150,7 @@ giftbox_device := class<concrete>(Inaugurable):
                             TextWidget.SetText(TextForUI("✔️"))
                             ImageWidget.SetImage(Textures.T_TreasureClaimed)
                             OnDurationBought.Signal(I)
-                            GlobalSuperlog("Showing as claimed")
+                            Print("Gift {I} is ready for player to claim!")
 
                             CanvasVisibility := GiftBoxCanvas.GetVisibility()
                             if (CanvasVisibility = widget_visibility.Visible):
@@ -145,11 +161,11 @@ giftbox_device := class<concrete>(Inaugurable):
                         else:
                             TextWidget.SetText(TextForUI(GetFormattedTimeString(Duration-1)))
                     else:
-                        GlobalSuperlog("Failed smth")
+                        GlobalSuperlog("Failed to update gift UI")
 
     GetFormattedTimeString(TimeInSecs : int)<transacts>:string=
         var FormattedTimeString : string = ""
-        HourTime : float = (TimeInSecs * 1.0) / 3599.9
+        HourTime : float = (TimeInSecs * 1.0) / 3600.0
         if(FlooredHourTime := Floor[HourTime]):
             if(FlooredHourTime > 0):
                 if(FlooredHourTime < 10):
@@ -157,7 +173,7 @@ giftbox_device := class<concrete>(Inaugurable):
                 set FormattedTimeString += ToString(FlooredHourTime) + ":"
             RemainedMinutesTime : float = HourTime - (FlooredHourTime * 1.0)
 
-            MinuteTime : float = RemainedMinutesTime * 59.9
+            MinuteTime : float = RemainedMinutesTime * 60.0
             if(FlooredMinuteTime := Floor[MinuteTime]):
                 if(FlooredMinuteTime < 10):
                     set FormattedTimeString += "0" + ToString(FlooredMinuteTime) + ":"
@@ -165,7 +181,7 @@ giftbox_device := class<concrete>(Inaugurable):
                     set FormattedTimeString += ToString(FlooredMinuteTime) + ":"
                 RemainedSecondsTime : float = MinuteTime - (FlooredMinuteTime * 1.0)
 
-                SecondsTime : float = RemainedSecondsTime * 59.9
+                SecondsTime : float = RemainedSecondsTime * 60.0
                 if(FlooredSecondsTime := Floor[SecondsTime]):
                     if(FlooredSecondsTime < 10):
                         set FormattedTimeString += "0" + ToString(FlooredSecondsTime)
@@ -175,8 +191,13 @@ giftbox_device := class<concrete>(Inaugurable):
         return FormattedTimeString
 
     OnPlayerSpawned(Agent : agent):void=
+        Print("Player spawned - setting up gift timers")
+        
+        # Always reset timers when player spawns/joins
         if (GiftBoxCanvas := GiftBoxCanvasPerAgent[Agent]):
-            return
+            Print("Player already had canvas, resetting timers only")
+        else:
+            Print("New player, creating canvas and timers")
 
         if (Player := player[Agent], PlayerUI := GetPlayerUI[Player]):
             GiftBoxCanvas : canvas = CreateGiftBoxCanvas()
@@ -185,6 +206,10 @@ giftbox_device := class<concrete>(Inaugurable):
 
             for (GiftBoxDuration : GiftBoxDurations):
                 set AgentGiftBoxDurations += array{ GiftBoxDuration }
+                
+            Print("Initialized gift timers:")
+            for (Index -> Duration : AgentGiftBoxDurations):
+                Print("  Gift {Index}: {Duration} seconds")
 
             if (set GiftBoxCanvasPerAgent[Agent] = GiftBoxCanvas){}
             if (set GiftBoxDurationsPerAgent[Agent] = AgentGiftBoxDurations){}
