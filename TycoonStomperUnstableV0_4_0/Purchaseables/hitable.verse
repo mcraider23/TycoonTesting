@@ -3,9 +3,10 @@ using { /Fortnite.com/Devices }
 using {/Fortnite.com/Teams}
 using { /UnrealEngine.com/Temporary/SpatialMath }
 using { /Verse.org/Assets }
+using { /Verse.org/Random }
 using {cc}
 
-# Enhanced hitable with leveling system and hit animations
+# Enhanced hitable with leveling system and hit animations - WITH RANDOM PROP DIRECTIONS
 hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
 
     @editable var hitableConfig : unique_hitable_buyable = unique_hitable_buyable{}
@@ -127,6 +128,8 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
     @editable var PropSpeed : float = 500.0
     @editable var PropLifetime : float = 2.0
     @editable var PropSpawnHeight : float = 100.0
+    @editable var PropSpawnCooldown : float = 1.0  # Cooldown between prop spawns in seconds
+    @editable var PropSpawnChance : float = 0.5    # Chance to spawn props (0.0-1.0, where 1.0 = always spawn)
 
     # Leveling system properties
     @editable var MaxLevel : int = 10000
@@ -145,6 +148,7 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
     var ComboActive : logic = false
     var OriginalTransforms : []transform = array{}
     var AnimationInitialized : logic = false
+    var PropSpawnOnCooldown : logic = false  # Track if props are on cooldown
 
     OnHit : event(agent) = event(agent){}
     ComboReset : event() = event(){}
@@ -238,9 +242,18 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
         
         return "__________"
 
-    # Spawn props in all directions on hit
+    # Spawn props in random directions on hit (with cooldown and random chance)
     SpawnHitProps<public>()<suspends>:void=
         if (SpawnPropsOnHit = false):
+            return
+        
+        # Check if props are on cooldown
+        if (PropSpawnOnCooldown = true):
+            return
+        
+        # Random chance to spawn props
+        RandomChance := GetRandomFloat(0.0, 1.0)
+        if (RandomChance > PropSpawnChance):
             return
         
         if (AnimatedProps.Length = 0):
@@ -255,46 +268,92 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
                 Z := CenterPos.Z + PropSpawnHeight
             }
             
-            # Spawn props in predefined directions (avoids trig functions)
+            # Set cooldown flag and start cooldown timer
+            set PropSpawnOnCooldown = true
+            spawn{PropSpawnCooldownTimer()}
+            
+            # Spawn props with random directions
             for (I := 0..PropCount - 1):
-                spawn{SpawnSinglePropDirectional(SpawnPos, I)}
+                spawn{SpawnSinglePropRandom(SpawnPos)}
 
-    # Spawn and animate a single prop using predefined directions
-    SpawnSinglePropDirectional(StartPos:vector3, DirIndex:int)<suspends>:void=
-        # Use predefined direction vectors to avoid trig - creates 8 directions
+    # Cooldown timer for prop spawning
+    PropSpawnCooldownTimer()<suspends>:void=
+        Sleep(PropSpawnCooldown)
+        set PropSpawnOnCooldown = false
+
+    # Spawn and animate a single prop in a RANDOM direction
+    SpawnSinglePropRandom(StartPos:vector3)<suspends>:void=
+        # Generate completely random direction using GetRandomFloat
+        RandomAngle := GetRandomFloat(0.0, 360.0)
+        
+        # Convert angle to direction components with smooth interpolation
         var DirectionX : float = 0.0
         var DirectionY : float = 0.0
         
-        # Calculate direction based on index (0-7 for 8 directions)
+        # Create 8 direction zones for smoother randomization
         if:
-            DivResult := Floor[DirIndex * 1.0 / 8.0]
+            AngleZone := Floor[RandomAngle / 45.0]
+            RemainderAngle := RandomAngle - (AngleZone * 45.0)
+            # Blend factor between 0 and 1 within the zone
+            BlendFactor := RemainderAngle / 45.0
         then:
-            Mod8 := DirIndex - (DivResult * 8)
-            
-            if (Mod8 = 0):  # Right
-                set DirectionX = PropSpeed
-                set DirectionY = 0.0
-            else if (Mod8 = 1):  # Up-Right
-                set DirectionX = PropSpeed * 0.707
-                set DirectionY = PropSpeed * 0.707
-            else if (Mod8 = 2):  # Up
-                set DirectionX = 0.0
-                set DirectionY = PropSpeed
-            else if (Mod8 = 3):  # Up-Left
-                set DirectionX = PropSpeed * -0.707
-                set DirectionY = PropSpeed * 0.707
-            else if (Mod8 = 4):  # Left
-                set DirectionX = PropSpeed * -1.0
-                set DirectionY = 0.0
-            else if (Mod8 = 5):  # Down-Left
-                set DirectionX = PropSpeed * -0.707
-                set DirectionY = PropSpeed * -0.707
-            else if (Mod8 = 6):  # Down
-                set DirectionX = 0.0
-                set DirectionY = PropSpeed * -1.0
-            else:  # Down-Right (7)
-                set DirectionX = PropSpeed * 0.707
-                set DirectionY = PropSpeed * -0.707
+            # Base directions for each zone (interpolate between cardinal/diagonal directions)
+            if (AngleZone = 0):  # 0-45 degrees (Right to Up-Right)
+                BaseX := PropSpeed
+                BaseY := 0.0
+                NextX := PropSpeed * 0.707
+                NextY := PropSpeed * 0.707
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 1):  # 45-90 degrees (Up-Right to Up)
+                BaseX := PropSpeed * 0.707
+                BaseY := PropSpeed * 0.707
+                NextX := 0.0
+                NextY := PropSpeed
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 2):  # 90-135 degrees (Up to Up-Left)
+                BaseX := 0.0
+                BaseY := PropSpeed
+                NextX := PropSpeed * -0.707
+                NextY := PropSpeed * 0.707
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 3):  # 135-180 degrees (Up-Left to Left)
+                BaseX := PropSpeed * -0.707
+                BaseY := PropSpeed * 0.707
+                NextX := PropSpeed * -1.0
+                NextY := 0.0
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 4):  # 180-225 degrees (Left to Down-Left)
+                BaseX := PropSpeed * -1.0
+                BaseY := 0.0
+                NextX := PropSpeed * -0.707
+                NextY := PropSpeed * -0.707
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 5):  # 225-270 degrees (Down-Left to Down)
+                BaseX := PropSpeed * -0.707
+                BaseY := PropSpeed * -0.707
+                NextX := 0.0
+                NextY := PropSpeed * -1.0
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else if (AngleZone = 6):  # 270-315 degrees (Down to Down-Right)
+                BaseX := 0.0
+                BaseY := PropSpeed * -1.0
+                NextX := PropSpeed * 0.707
+                NextY := PropSpeed * -0.707
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
+            else:  # 315-360 degrees (Down-Right to Right)
+                BaseX := PropSpeed * 0.707
+                BaseY := PropSpeed * -0.707
+                NextX := PropSpeed
+                NextY := 0.0
+                set DirectionX = BaseX + ((NextX - BaseX) * BlendFactor)
+                set DirectionY = BaseY + ((NextY - BaseY) * BlendFactor)
             
             # Spawn the prop
             MaybeSpawnResult := SpawnProp(PropToSpawn, StartPos, rotation{})
@@ -312,11 +371,14 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
                 }
                 if(SpawnedProp.TeleportTo[ScaledTransform]){}
                 
-                # Calculate end position
+                # Add randomness to fall distance
+                RandomFallDistance := GetRandomFloat(150.0, 250.0)
+                
+                # Calculate end position with randomized distance
                 EndPos := vector3{
                     X := StartPos.X + DirectionX,
                     Y := StartPos.Y + DirectionY,
-                    Z := StartPos.Z - 200.0  # Fall down
+                    Z := StartPos.Z - RandomFallDistance
                 }
                 
                 # Move the prop outward
@@ -378,6 +440,7 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
                     }
                     Print("Moving prop UP to Z={UpPos.Z}")
                     Prop.MoveTo(UpPos, OriginalTrans.Rotation, UpTime)
+                    Print("MoveTo called")
         
         # Wait for up animation
         Sleep(UpTime)
