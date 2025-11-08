@@ -112,6 +112,10 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
             set Owner.UnclaimedBases = Owner.UnclaimedBases.RemoveAllElements(Self)
             Base_Setup.PurchaseableConfigs.Purchase_Zone.OnSuccess(Player, false)
             
+            # CRITICAL: Show the base setup TWC props immediately after claiming
+            GlobalSuperlog("=== SHOWING BASE SETUP PROPS AFTER CLAIM ===")
+            spawn{Base_Setup.PurchaseableConfigs.ShowTWCProps()}
+            
             # Load unlocks FIRST before showing anything
             if:
                 Base_Setup.PersistUnlocks?
