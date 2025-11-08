@@ -8,33 +8,16 @@ using {Runtimeinstantiables}
 using {cc}
 
 <#
+Tycoon Stomper - Conveyor Classes
 
-░█████╗░██╗░░░██╗░██████╗████████╗░█████╗░███╗░░░███╗  ░█████╗░░█████╗░███╗░░██╗██╗░░░██╗███████╗██╗░░░██╗░█████╗░██████╗░
-██╔══██╗██║░░░██║██╔════╝╚══██╔══╝██╔══██╗████╗░████║  ██╔══██╗██╔══██╗████╗░██║██║░░░██║██╔════╝╚██╗░██╔╝██╔══██╗██╔══██╗
-██║░░╚═╝██║░░░██║╚█████╗░░░░██║░░░██║░░██║██╔████╔██║  ██║░░╚═╝██║░░██║██╔██╗██║╚██╗░██╔╝█████╗░░░╚████╔╝░██║░░██║██████╔╝
-██║░░██╗██║░░░██║░╚═══██╗░░░██║░░░██║░░██║██║╚██╔╝██║  ██║░░██╗██║░░██║██║╚████║░╚████╔╝░██╔══╝░░░░╚██╔╝░░██║░░██║██╔══██╗
-╚█████╔╝╚██████╔╝██████╔╝░░░██║░░░╚█████╔╝██║░╚═╝░██║  ╚█████╔╝╚█████╔╝██║░╚███║░░╚██╔╝░░███████╗░░░██║░░░╚█████╔╝██║░░██║
-░╚════╝░░╚═════╝░╚═════╝░░░░╚═╝░░░░╚════╝░╚═╝░░░░░╚═╝  ░╚════╝░░╚════╝░╚═╝░░╚══╝░░░╚═╝░░░╚══════╝░░░╚═╝░░░░╚════╝░╚═╝░░╚═╝
-
-░█████╗░██╗░░░░░░█████╗░░██████╗░██████╗███████╗░██████╗░░░██╗░░░██╗███████╗██████╗░░██████╗███████╗
-██╔══██╗██║░░░░░██╔══██╗██╔════╝██╔════╝██╔════╝██╔════╝░░░██║░░░██║██╔════╝██╔══██╗██╔════╝██╔════╝
-██║░░╚═╝██║░░░░░███████║╚█████╗░╚█████╗░█████╗░░╚█████╗░░░░╚██╗░██╔╝█████╗░░██████╔╝╚█████╗░█████╗░░
-██║░░██╗██║░░░░░██╔══██║░╚═══██╗░╚═══██╗██╔══╝░░░╚═══██╗░░░░╚████╔╝░██╔══╝░░██╔══██╗░╚═══██╗██╔══╝░░
-╚█████╔╝███████╗██║░░██║██████╔╝██████╔╝███████╗██████╔╝██╗░░╚██╔╝░░███████╗██║░░██║██████╔╝███████╗
-░╚════╝░╚══════╝╚═╝░░╚═╝╚═════╝░╚═════╝░╚══════╝╚═════╝░╚═╝░░░╚═╝░░░╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝
-
-█▀▄ █▀▀ █░█ █▀▀ █░░ █▀█ █▀█ █▀▀ █▀▄   █▄▄ █▄█   ▀█▀ █▀ ▄▀█ █▀█
-█▄▀ ██▄ ▀▄▀ ██▄ █▄▄ █▄█ █▀▀ ██▄ █▄▀   █▄█ ░█░   ░█░ ▄█ █▀█ █▀▄
-
-▄▀█ █░░ █░░   █▀█ █ █▀▀ █░█ ▀█▀ █▀   █▀█ █▀▀ █▀ █▀▀ █▀█ █░█ █▀▀ █▀▄
-█▀█ █▄▄ █▄▄   █▀▄ █ █▄█ █▀█ ░█░ ▄█   █▀▄ ██▄ ▄█ ██▄ █▀▄ ▀▄▀ ██▄ █▄▀
-
-█▀▄ █▀█   █▄░█ █▀█ ▀█▀   █▀ █▀▀ █░░ █░░
-█▄▀ █▄█   █░▀█ █▄█ ░█░   ▄█ ██▄ █▄▄ █▄▄
+Developed by TSAR 
+ALL RIGHTS RESERVED
+DO NOT SELL
 
 SIMPLIFIED FIX - Stays close to original working code
 - Fixed: Only first dropper giving currency (StartDex instead of 0)
 - Fixed: Props persist after rebirth (track and cleanup spawned props)
+- Fixed: Props spawn from random locations after rebirth (cancellation token)
 - Simpler approach that doesn't interfere with the working race condition
 #>
 
@@ -81,6 +64,9 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
     # Track spawned props for cleanup
     var SpawnedProps : []creative_prop = array{}
     
+    # Cancellation token to stop spawn loop
+    var SpawnLoopActive <public> : logic = false
+    
 
 
     GetAssociatedValue<override>():vector2=
@@ -90,19 +76,41 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
         GlobalSuperlog("=== DROPPER ACTION STARTED - Moving dropper prop into position ===")
         (super:)Action(_Waypoint, _Conveyor, StartDex)
         GlobalSuperlog("=== DROPPER IN POSITION - Starting spawn loop ===")
+        
+        # Set spawn loop as active
+        set SpawnLoopActive = true
+        
         loop:
+            # Check if we should stop spawning
+            if (SpawnLoopActive = false):
+                GlobalSuperlog("Dropper spawn loop cancelled")
+                break
+                
             Sleep(PropSpawnRate)
             GlobalSuperlog("Spawning prop from dropper")
             spawn{SpawnProp(_Conveyor, StartDex)}
 
-    # Simple cleanup - dispose all tracked props
+    # Enhanced cleanup - dispose props AND stop spawn loop
     CleanupAllProps<public>():void=
+        GlobalSuperlog("Cleaning up dropper - disposing {SpawnedProps.Length} props")
+        
+        # Stop the spawn loop
+        set SpawnLoopActive = false
+        
+        # Dispose all tracked props
         for(Prop : SpawnedProps):
             Prop.Dispose()
         set SpawnedProps = array{}
+        
+        GlobalSuperlog("Dropper cleanup complete")
     
             
     SpawnProp(_Conveyor:custom_conveyor, StartDex:int)<suspends>:void=
+        # Check if spawn loop is still active
+        if (SpawnLoopActive = false):
+            GlobalSuperlog("Spawn cancelled - dropper unlinked")
+            return
+            
         GlobalSuperlog(">>> SpawnProp called with StartDex={StartDex}")
         var CurrentCubeValue : float = 0.0
         Sleep(0.1); set CurrentCubeValue = CubeValue
@@ -122,6 +130,12 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
             
             var ActiveDex: int = StartDex
                 loop:
+                    # Check if spawn loop is still active before each movement
+                    if (SpawnLoopActive = false):
+                        GlobalSuperlog("Movement cancelled mid-loop - disposing prop")
+                        SpawnedProp.Dispose()
+                        return
+                        
                     GlobalSuperlog("Loop iteration: ActiveDex={ActiveDex}")
                     if:
                         CNextWaypoint := _Conveyor.ConveyorWaypoints[ActiveDex]
@@ -298,9 +312,18 @@ waypoint<public>:=class<concrete><final>(Inaugurable):
             not Item.Placed?
         then:
             GlobalSuperlog("Link successful - Item type matches and not already placed")
+            
+            # CRITICAL FIX: Reset dropper state FIRST, before any async operations
+            if:
+                Dropper := custom_dropper[Item]
+            then:
+                GlobalSuperlog("Resetting dropper SpawnLoopActive flag BEFORE spawn")
+                set Dropper.SpawnLoopActive = true
+            
             Item.prop.Show()
             set Item.Placed = true
             set LinkedItem = option{Item}
+            
             NewLink.Signal()
             spawn{ManageLinkedItem()}
             GlobalSuperlog("Linked and spawned ManageLinkedItem")
@@ -317,7 +340,6 @@ waypoint<public>:=class<concrete><final>(Inaugurable):
                     GlobalSuperlog("Item not placed but link still failed")
             else:
                 GlobalSuperlog("Type mismatch")
-
 
 
 

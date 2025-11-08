@@ -10,29 +10,11 @@ using {Runtimeinstantiables}
 using {cc}
 
 <#
+Tycoon Stomper - Core Classes
 
-░█████╗░██╗░░░██╗░██████╗████████╗░█████╗░███╗░░░███╗
-██╔══██╗██║░░░██║██╔════╝╚══██╔══╝██╔══██╗████╗░████║
-██║░░╚═╝██║░░░██║╚█████╗░░░░██║░░░██║░░██║██╔████╔██║
-██║░░██╗██║░░░██║░╚═══██╗░░░██║░░░██║░░██║██║╚██╔╝██║
-╚█████╔╝╚██████╔╝██████╔╝░░░██║░░░╚█████╔╝██║░╚═╝░██║
-░╚════╝░░╚═════╝░╚═════╝░░░░╚═╝░░░░╚════╝░╚═╝░░░░░╚═╝
-
-░█████╗░██╗░░░░░░█████╗░░██████╗░██████╗███████╗░██████╗░░░██╗░░░██╗███████╗██████╗░░██████╗███████╗
-██╔══██╗██║░░░░░██╔══██╗██╔════╝██╔════╝██╔════╝██╔════╝░░░██║░░░██║██╔════╝██╔══██╗██╔════╝██╔════╝
-██║░░╚═╝██║░░░░░███████║╚█████╗░╚█████╗░█████╗░░╚█████╗░░░░╚██╗░██╔╝█████╗░░██████╔╝╚█████╗░█████╗░░
-██║░░██╗██║░░░░░██╔══██║░╚═══██╗░╚═══██╗██╔══╝░░░╚═══██╗░░░░╚████╔╝░██╔══╝░░██╔══██╗░╚═══██╗██╔══╝░░
-╚█████╔╝███████╗██║░░██║██████╔╝██████╔╝███████╗██████╔╝██╗░░╚██╔╝░░███████╗██║░░██║██████╔╝███████╗
-░╚════╝░╚══════╝╚═╝░░╚═╝╚═════╝░╚═════╝░╚══════╝╚═════╝░╚═╝░░░╚═╝░░░╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝
-
-█▀▄ █▀▀ █░█ █▀▀ █░░ █▀█ █▀█ █▀▀ █▀▄   █▄▄ █▄█   ▀█▀ █▀ ▄▀█ █▀█
-█▄▀ ██▄ ▀▄▀ ██▄ █▄▄ █▄█ █▀▀ ██▄ █▄▀   █▄█ ░█░   ░█░ ▄█ █▀█ █▀▄
-
-▄▀█ █░░ █░░   █▀█ █ █▀▀ █░█ ▀█▀ █▀   █▀█ █▀▀ █▀ █▀▀ █▀█ █░█ █▀▀ █▀▄
-█▀█ █▄▄ █▄▄   █▀▄ █ █▄█ █▀█ ░█░ ▄█   █▀▄ ██▄ ▄█ ██▄ █▀▄ ▀▄▀ ██▄ █▄▀
-
-█▀▄ █▀█   █▄░█ █▀█ ▀█▀   █▀ █▀▀ █░░ █░░
-█▄▀ █▄█   █░▀█ █▄█ ░█░   ▄█ ██▄ █▄▄ █▄▄
+Developed by TSAR 
+ALL RIGHTS RESERVED
+DO NOT SELL
 #>
 
 var UsingDebug<public>:weak_map(session, logic) = map{}
@@ -300,6 +282,15 @@ TWC_unique_prop<public>:=class<unique><concrete>(SuperClassInaugurable):
             for. PropIn:OriginProps
             do. set PropIn.Visibility = LogicalVisibilityStatus.Shown
 
+    # Public method to reset visibility status (used during rebirth)
+    ResetVisibility<public>():void=
+        GlobalSuperlog("Resetting visibility for TWC: {SetName}")
+        set Status = LogicalVisibilityStatus.Undefined
+        for:
+            OriginProp:OriginProps
+        do:
+            set OriginProp.Visibility = LogicalVisibilityStatus.Undefined
+
     SwitchToRed<public>()<transacts><decides>:void=
         PropToChange := props[Color_Change_Index]
         PropToChange.SetMaterial(MI_Simple_PureRed_Flat_Inst, ?Index:=Material_Change_Index)
@@ -334,23 +325,50 @@ TWC_unique_prop<public>:=class<unique><concrete>(SuperClassInaugurable):
         set Status = LogicalVisibilityStatus.Hidden
 
     Show<public>(Anim:animation_main)<suspends>:void=
+        GlobalSuperlog("TWC Show called for: {SetName}")
+        
+        # If status is Undefined, props are at origin but hidden - just show them
+        if:
+            Status = LogicalVisibilityStatus.Undefined
+        then:
+            GlobalSuperlog("Status is Undefined for {SetName} - teleporting to origin and showing")
+            for:
+                OriginProp:OriginProps
+            do:
+                # Teleport to origin position
+                if:
+                    OriginProp.prop.TeleportTo[OriginProp.origin]
+                then:
+                    void
+                # Show the prop
+                OriginProp.prop.Show()
+                set OriginProp.Visibility = LogicalVisibilityStatus.Shown
+            
+            set Status = LogicalVisibilityStatus.Shown
+            return
+        
+        # Always show the props
         for:
             Prop:props
         do:
             Prop.Show()
             
+        # Only animate if we're coming from Hidden state
         if:
             Animates? and Status = LogicalVisibilityStatus.Hidden
         then:
+            GlobalSuperlog("Animating props for {SetName}")
             Anim.ShowProps(OriginProps)
         else if:
             Status = LogicalVisibilityStatus.Hidden
         then:
+            GlobalSuperlog("Showing without animation for {SetName}")
             var AnimLess : animation_main = Anim
             set AnimLess.PurchaseAnimationStyle = AnimationStyle.none
             Anim.ShowProps(OriginProps)
 
         set Status = LogicalVisibilityStatus.Shown
+        GlobalSuperlog("TWC Show complete for: {SetName}")
 
 origin_prop<public>:=class<unique>(Inaugurable):
     prop <public> : creative_prop
