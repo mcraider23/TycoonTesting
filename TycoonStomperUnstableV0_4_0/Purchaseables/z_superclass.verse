@@ -39,38 +39,83 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
     @editable var  UnlockTheseItems : []purchase_set = array{}
     @editable var PropsV2 : []TWC_unique_prop = array{}
     @editable var AnimationConfig <public> : animation_main = animation_main{}
-    @editable var  HudConfig : hud_main = hud_main{OnFailedMessage := option{"You need [MoneyNeeded] more to purchase [Name]"}; OnSuccessMessage := option{"Succsessfully Purchased [Name]"}}
+    @editable var  HudConfig : hud_main = hud_main{OnFailedMessage := option{"You need [MoneyNeeded] more money and [RebirthsNeeded] more rebirths to purchase [Name]"}; OnSuccessMessage := option{"Succsessfully Purchased [Name]"}}
     @editable var BillboardConfig : billboard_main = billboard_main{}
     @editable var  ConditionsToBuy : condition = condition{}
     @editable var  Purchase_Zone <public> : anyzone_or_atm = anyzone_or_atm{}
     @editable var  VFX : vfx_main = vfx_main{}
     @editable var SFX : sfx_main = sfx_main{}
 
+    # Public method to show TWC props (used for base setup)
+    ShowTWCProps<public>()<suspends>:void=
+        GlobalSuperlog("ShowTWCProps called for: {Name}")
+        for:
+            TWC:PropsV2
+        do:
+            if (TWC.OnPurchaseFunction = PurchaseMovementType.Show):
+                GlobalSuperlog("Showing TWC: {TWC.SetName}")
+                spawn{TWC.Show(AnimationConfig)}
+
     OnRebirth<override>():void=
+        GlobalSuperlog("=== REBIRTHING {Name} ===")
+        
+        # Signal rebirth to stop all existing hosting/management loops
         RebirthedEvent.Signal()
+        
         if(InitialStatus = Dependency.Unlocked){Unlock()}
         if(InitialStatus = Dependency.Locked){Lock()}
+
+        # ALWAYS reset and restart SubHost for all items
+        # This ensures button management and post-purchase showing works correctly
+        GlobalSuperlog("Resetting all TWC props for {Name}")
+        for:
+            TWC:PropsV2
+        do:
+            # Explicitly hide each prop
+            for:
+                Prop:TWC.props
+            do:
+                Prop.Hide()
+            
+            # If this was purchased, also animate the hide
+            if:
+                IsPurchased = PurchasedStatus.Purchased
+            then:
+                TWC.Hide(AnimationConfig)
+            
+            # Reset visibility status
+            TWC.ResetVisibility()
 
         if:
             IsPurchased = PurchasedStatus.Purchased
         then:
-            # Hide all TWC props before resetting
-            for:
-                TWC:PropsV2
-            do:
-                # Hide using animation config (this also sets Status internally)
-                TWC.Hide(AnimationConfig)
-                # Also explicitly hide each prop to be sure
-                for:
-                    Prop:TWC.props
-                do:
-                    Prop.Hide()
-            
+            GlobalSuperlog("{Name} was previously purchased - resetting purchase state")
             set CanLoad = true
             set IsPurchased = PurchasedStatus.NotPurchased
             Purchase_Zone.Enable()
             Purchase_Zone.Show()
-            spawn{SubHost()}
+            
+            # CRITICAL: Re-show billboard since item is available for purchase again
+            if:
+                StartAs = Dependency.Unlocked
+            then:
+                GlobalSuperlog("Re-showing billboard for {Name}")
+                BillboardConfig.Instantiate()
+        else:
+            # Item wasn't purchased, but make sure billboard state is correct
+            if:
+                StartAs = Dependency.Unlocked
+            then:
+                # Item should show billboard
+                GlobalSuperlog("Ensuring billboard is shown for unlocked item: {Name}")
+                BillboardConfig.Instantiate()
+            else:
+                # Item is locked, hide billboard
+                GlobalSuperlog("Hiding billboard for locked item: {Name}")
+                BillboardConfig.Hide()
+        
+        # CRITICAL: Always restart SubHost so TWC management works after rebirth
+        spawn{SubHost()}
         
         if:
             StartAs = Dependency.Unlocked
@@ -280,18 +325,34 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         }
         if:
             MaybeGrantInterval := GrantInterval?
-            set default["[GrantInterval]"] = "{MaybeGrantInterval}"
+        then:
+            if. set default["[GrantInterval]"] = "{MaybeGrantInterval}"
+        
         if:
             Player := MaybeP?
             Owner := MaybeOwner?
             Stats := PlayerStats := GetCoreStats[Player, Owner.Base_Setup.PersistenceCore]
         then:
+            # Calculate how much more money is needed (can be negative if player has enough)
             if:
-                MoneyNeeded := Price - Stats.AssociatedCurrencies[CurrencyToSpendID]
-                set default["[MoneyNeeded]"] = "{MoneyNeeded}"
+                PlayerMoney := Stats.AssociatedCurrencies[CurrencyToSpendID]
+            then:
+                MoneyNeeded := Price - PlayerMoney
+                if:
+                    MoneyNeeded > 0
+                then:
+                    if. set default["[MoneyNeeded]"] = "{MoneyNeeded}"
+                else:
+                    if. set default["[MoneyNeeded]"] = "0"
+            
+            # Calculate how many more rebirths are needed (can be negative if player has enough)
+            RebirthsLeft := ConditionsToBuy.MinRebirths - Stats.Rebirths
             if:
-                RebirthsLeft := ConditionsToBuy.MinRebirths - Stats.Rebirths
-                set default["[RebirthsLeft]"] = "{RebirthsLeft}"
+                RebirthsLeft > 0
+            then:
+                if. set default["[RebirthsNeeded]"] = "{RebirthsLeft}"
+            else:
+                if. set default["[RebirthsNeeded]"] = "0"
         
         return default
 
@@ -484,6 +545,14 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
         
         # Call OnBought to set everything up (it WILL unlock dependents)
         OnBought(Player)
+        
+        # CRITICAL: Explicitly show all TWC props after loading
+        for:
+            TWC:PropsV2
+        do:
+            if (TWC.OnPurchaseFunction = PurchaseMovementType.Show):
+                GlobalSuperlog("Showing TWC prop set: {TWC.SetName}")
+                spawn{TWC.Show(AnimationConfig)}
         
         GlobalSuperlog("=== FINISHED LOADING {Name} ===")
 
