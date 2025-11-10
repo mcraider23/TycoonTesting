@@ -571,13 +571,29 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
 basic_prop_buyable<public>:=class<concrete><final>(purchaseable):
     var Ptype <override> :  PurchaseableType = PurchaseableType.BasicProp
 
+    # NEW: Ammo generator support
+    @editable var UnlocksAmmoGenerator : logic = false
+    @editable var AmmoGenerator : ammo_generator_device = ammo_generator_device{}
+    @editable var AmmoTypeIndex : int = 0
+
     Initialize<override>(Hostess:base, I:int):void=
         (super:)Initialize(Hostess, I)
         Detail("BasicPropBuyable")
 
     Host<override>()<suspends>:void=
+        # Activate ammo generator if this prop unlocks one
+        if (UnlocksAmmoGenerator?):
+            Print("Unlocking ammo type index {AmmoTypeIndex}")
+            AmmoGenerator.ActivateGenerator(AmmoTypeIndex)
+        
         loop:
-            Sleep(Inf);
+            Sleep(Inf)
+
+    OnRebirth<override>():void=
+        (super:)OnRebirth()
+        # Deactivate the generator on rebirth if this was an ammo unlock
+        if (UnlocksAmmoGenerator?):
+            AmmoGenerator.DeactivateGenerator(AmmoTypeIndex)
 
 fxpurchaseable<public>:=class<abstract>(purchaseable, ExpandedFX):
     @editable var FXMain  <public> :  fx_main = fx_main{}
