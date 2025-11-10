@@ -37,6 +37,7 @@ hunger_energy_device := class(creative_device):
     var PlayerEnergy : [player]float = map{}
     var PlayersInRestZone : [player]logic = map{}
     var PlayersInHungerZone : [player]logic = map{}
+    var ActivePlayers : [player]logic = map{}
 
     AddStatsWidget(Player : player):void =
         if (PlayerUI := GetPlayerUI[Player]):
@@ -91,7 +92,6 @@ hunger_energy_device := class(creative_device):
                                     EnergyText.SetText(ToMessage("Energy: {EnergyInt}%"))
                                     EnergyText.SetTextColor(GetStatColor(Energy, InitialEnergy))
 
-    # Subscribe to elimination events for each player, and reset stats on respawn
     SubscribeToElimination(Player : player):void =
         if (Character := Player.GetFortCharacter[]):
             Character.EliminatedEvent().Subscribe(OnEliminated)
@@ -102,71 +102,78 @@ hunger_energy_device := class(creative_device):
             if (set PlayerEnergy[Player] = InitialEnergy) {}
             UpdatePlayerStats(Player)
 
+    # PUBLIC: Activate hunger for a player (call this when they claim base)
+    ActivateHungerForPlayer<public>(Player : player):void =
+        Print("Activating hunger system for player")
+        if (set ActivePlayers[Player] = true) {}
+        if (set PlayerHunger[Player] = InitialHunger) {}
+        if (set PlayerEnergy[Player] = InitialEnergy) {}
+        if (set PlayersInRestZone[Player] = false) {}
+        if (set PlayersInHungerZone[Player] = false) {}
+        AddStatsWidget(Player)
+        UpdatePlayerStats(Player)
+        SubscribeToElimination(Player)
+
+    # PUBLIC: Deactivate hunger (call this on rebirth)
+    DeactivateHungerForPlayer<public>(Player : player):void =
+        Print("Deactivating hunger system for player")
+        if (set ActivePlayers[Player] = false) {}
+
     OnBegin<override>()<suspends>:void =
+        # Set up zones
         for (Zone : RestZones):
             Zone.AgentEntersEvent.Subscribe(OnEnterRestZone)
             Zone.AgentExitsEvent.Subscribe(OnExitRestZone)
         for (Zone : HungerRestoreZones):
             Zone.AgentEntersEvent.Subscribe(OnEnterHungerZone)
             Zone.AgentExitsEvent.Subscribe(OnExitHungerZone)
-        for (Player : GetPlayspace().GetPlayers()):
-            if (set PlayerHunger[Player] = InitialHunger) {}
-            if (set PlayerEnergy[Player] = InitialEnergy) {}
-            if (set PlayersInRestZone[Player] = false) {}
-            if (set PlayersInHungerZone[Player] = false) {}
-            AddStatsWidget(Player)
-            UpdatePlayerStats(Player)
-            SubscribeToElimination(Player)
-        GetPlayspace().PlayerAddedEvent().Subscribe(OnPlayerAdded)
+        
+        # Start the loops
         spawn{DamageLoop()}
         spawn{RestorationLoop()}
+        spawn{DrainLoop()}
+
+    DrainLoop()<suspends>:void =
         loop:
             Sleep(DrainInterval)
-            for (Player : GetPlayspace().GetPlayers()):
-                if (Hunger := PlayerHunger[Player]):
-                    if (Energy := PlayerEnergy[Player]):
-                        NewHunger := Max(0.0, Hunger - HungerDrainRate)
-                        NewEnergy := Max(0.0, Energy - EnergyDrainRate)
-                        if (set PlayerHunger[Player] = NewHunger) {}
-                        if (set PlayerEnergy[Player] = NewEnergy) {}
-                        UpdatePlayerStats(Player)
+            for (Player -> IsActive : ActivePlayers):
+                if (IsActive = true):
+                    if (Hunger := PlayerHunger[Player]):
+                        if (Energy := PlayerEnergy[Player]):
+                            NewHunger := Max(0.0, Hunger - HungerDrainRate)
+                            NewEnergy := Max(0.0, Energy - EnergyDrainRate)
+                            if (set PlayerHunger[Player] = NewHunger) {}
+                            if (set PlayerEnergy[Player] = NewEnergy) {}
+                            UpdatePlayerStats(Player)
 
     RestorationLoop()<suspends>:void =
         loop:
             Sleep(DrainInterval)
-            for (Player : GetPlayspace().GetPlayers()):
-                if (PlayersInRestZone[Player] = true):
-                    if (Energy := PlayerEnergy[Player]):
-                        NewEnergy := Min(InitialEnergy, Energy + EnergyRechargeRate)
-                        if (set PlayerEnergy[Player] = NewEnergy) {}
-                        UpdatePlayerStats(Player)
-                if (PlayersInHungerZone[Player] = true):
-                    if (Hunger := PlayerHunger[Player]):
-                        NewHunger := Min(InitialHunger, Hunger + HungerRestorePerFood)
-                        if (set PlayerHunger[Player] = NewHunger) {}
-                        UpdatePlayerStats(Player)
+            for (Player -> IsActive : ActivePlayers):
+                if (IsActive = true):
+                    if (PlayersInRestZone[Player] = true):
+                        if (Energy := PlayerEnergy[Player]):
+                            NewEnergy := Min(InitialEnergy, Energy + EnergyRechargeRate)
+                            if (set PlayerEnergy[Player] = NewEnergy) {}
+                            UpdatePlayerStats(Player)
+                    if (PlayersInHungerZone[Player] = true):
+                        if (Hunger := PlayerHunger[Player]):
+                            NewHunger := Min(InitialHunger, Hunger + HungerRestorePerFood)
+                            if (set PlayerHunger[Player] = NewHunger) {}
+                            UpdatePlayerStats(Player)
 
     DamageLoop()<suspends>:void =
         loop:
             Sleep(DamageInterval)
-            for (Player : GetPlayspace().GetPlayers()):
-                if (Hunger := PlayerHunger[Player]):
-                    if (Energy := PlayerEnergy[Player]):
-                        if (Character := Player.GetFortCharacter[]):
-                            if (Hunger = 0.0 and Energy = 0.0):
-                                Character.Damage(BothStatsDamage)
-                            else if (Hunger = 0.0 or Energy = 0.0):
-                                Character.Damage(LowStatDamage)
-
-    OnPlayerAdded(InAgent : agent):void =
-        if (Player := player[InAgent]):
-            if (set PlayerHunger[Player] = InitialHunger) {}
-            if (set PlayerEnergy[Player] = InitialEnergy) {}
-            if (set PlayersInRestZone[Player] = false) {}
-            if (set PlayersInHungerZone[Player] = false) {}
-            AddStatsWidget(Player)
-            UpdatePlayerStats(Player)
-            SubscribeToElimination(Player)
+            for (Player -> IsActive : ActivePlayers):
+                if (IsActive = true):
+                    if (Hunger := PlayerHunger[Player]):
+                        if (Energy := PlayerEnergy[Player]):
+                            if (Character := Player.GetFortCharacter[]):
+                                if (Hunger = 0.0 and Energy = 0.0):
+                                    Character.Damage(BothStatsDamage)
+                                else if (Hunger = 0.0 or Energy = 0.0):
+                                    Character.Damage(LowStatDamage)
 
     OnEnterRestZone(Agent : agent):void =
         if (Player := player[Agent]):

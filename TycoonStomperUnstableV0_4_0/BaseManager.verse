@@ -40,6 +40,7 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
     @editable var Shootables: []shootable_buyable = array{}
     @editable var Upgraders: []purchaseable_upgrader = array{}
     @editable var UIConfig : []currency_ui_config = array{}
+    @editable var HungerSystem : hunger_energy_device = hunger_energy_device{}
 
     var PlayerToPetMap : [player]tuple(pet, logic) = map{}
     var AttemptedBaseClaim : event() = event(){}
@@ -111,10 +112,15 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
                 set RootPlayer = option{Player}
             set Owner.UnclaimedBases = Owner.UnclaimedBases.RemoveAllElements(Self)
             Base_Setup.PurchaseableConfigs.Purchase_Zone.OnSuccess(Player, false)
-            
+                
             # CRITICAL: Show the base setup TWC props immediately after claiming
             GlobalSuperlog("=== SHOWING BASE SETUP PROPS AFTER CLAIM ===")
             spawn{Base_Setup.PurchaseableConfigs.ShowTWCProps()}
+        
+        # HUNGER SYSTEM: Activate hunger for this player
+            HungerSystem.ActivateHungerForPlayer(Player)
+        
+        # ... rest of the OnBought code
             
             # Load unlocks FIRST before showing anything
             if:
@@ -229,6 +235,10 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
             Rebirth(Player, Base_Setup.PersistenceCore)
             Base_Setup.RebirthConfig.HudConfig.OnSuccessfullPlayer(Player)
             Base_Setup.RebirthConfig.RebirthAccolade.Award(Player)
+        
+        # HUNGER SYSTEM: Deactivate hunger for this player
+            HungerSystem.DeactivateHungerForPlayer(Player)
+        
             set Players = Players.RemoveAllElements(Player)
             
         set Players = array{}
