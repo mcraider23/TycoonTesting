@@ -32,7 +32,7 @@ hunger_energy_device := class(creative_device):
     @editable var LowStatDamage : float = 1.0
     @editable var BothStatsDamage : float = 5.0
 
-    var PlayerWidgets : [player]stack_box = map{}
+    var PlayerCanvases : [player]canvas = map{}  # CHANGED: Store canvas instead of stack_box
     var PlayerHunger : [player]float = map{}
     var PlayerEnergy : [player]float = map{}
     var PlayersInRestZone : [player]logic = map{}
@@ -74,23 +74,26 @@ hunger_energy_device := class(creative_device):
                 ZOrder := 100
                 InputMode := ui_input_mode.None
             })
-            if (set PlayerWidgets[Player] = StatsBox) {}
+            if (set PlayerCanvases[Player] = Canvas) {}  # CHANGED: Store canvas
 
     UpdatePlayerStats(Player : player):void =
-        if (StatsBox := PlayerWidgets[Player]):
-            if (Hunger := PlayerHunger[Player]):
-                if (Energy := PlayerEnergy[Player]):
-                    if (StatsBox.Slots.Length = 2):
-                        if (HungerSlot := StatsBox.Slots[0]):
-                            if (HungerText := text_block[HungerSlot.Widget]):
-                                if (HungerInt := Round[Hunger]):
-                                    HungerText.SetText(ToMessage("Hunger: {HungerInt}%"))
-                                    HungerText.SetTextColor(GetStatColor(Hunger, InitialHunger))
-                        if (EnergySlot := StatsBox.Slots[1]):
-                            if (EnergyText := text_block[EnergySlot.Widget]):
-                                if (EnergyInt := Round[Energy]):
-                                    EnergyText.SetText(ToMessage("Energy: {EnergyInt}%"))
-                                    EnergyText.SetTextColor(GetStatColor(Energy, InitialEnergy))
+        if (Canvas := PlayerCanvases[Player]):  # CHANGED: Get canvas
+            if (Canvas.Slots.Length > 0):
+                if (CanvasSlot := Canvas.Slots[0]):
+                    if (StatsBox := stack_box[CanvasSlot.Widget]):  # Get StatsBox from canvas
+                        if (Hunger := PlayerHunger[Player]):
+                            if (Energy := PlayerEnergy[Player]):
+                                if (StatsBox.Slots.Length = 2):
+                                    if (HungerSlot := StatsBox.Slots[0]):
+                                        if (HungerText := text_block[HungerSlot.Widget]):
+                                            if (HungerInt := Round[Hunger]):
+                                                HungerText.SetText(ToMessage("Hunger: {HungerInt}%"))
+                                                HungerText.SetTextColor(GetStatColor(Hunger, InitialHunger))
+                                    if (EnergySlot := StatsBox.Slots[1]):
+                                        if (EnergyText := text_block[EnergySlot.Widget]):
+                                            if (EnergyInt := Round[Energy]):
+                                                EnergyText.SetText(ToMessage("Energy: {EnergyInt}%"))
+                                                EnergyText.SetTextColor(GetStatColor(Energy, InitialEnergy))
 
     SubscribeToElimination(Player : player):void =
         if (Character := Player.GetFortCharacter[]):
@@ -118,6 +121,15 @@ hunger_energy_device := class(creative_device):
     DeactivateHungerForPlayer<public>(Player : player):void =
         Print("Deactivating hunger system for player")
         if (set ActivePlayers[Player] = false) {}
+        
+        # CRITICAL FIX: Remove the UI widget when deactivating
+        if (Canvas := PlayerCanvases[Player]):
+            if (PlayerUI := GetPlayerUI[Player]):
+                PlayerUI.RemoveWidget(Canvas)
+                Print("Removed hunger UI for player")
+        
+        # Clear the canvas reference
+        if (set PlayerCanvases[Player] = canvas{}) {}
 
     OnBegin<override>()<suspends>:void =
         # Set up zones
