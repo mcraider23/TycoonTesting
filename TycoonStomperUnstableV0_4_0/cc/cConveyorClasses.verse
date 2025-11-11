@@ -1,4 +1,3 @@
-
 using { /Verse.org/Random }
 using { /Fortnite.com/Devices }
 using { /Verse.org/Simulation }
@@ -15,11 +14,6 @@ Developed by TSAR
 ALL RIGHTS RESERVED
 DO NOT SELL
 
-SIMPLIFIED FIX - Stays close to original working code
-- Fixed: Only first dropper giving currency (StartDex instead of 0)
-- Fixed: Props persist after rebirth (track and cleanup spawned props)
-- Fixed: Props spawn from random locations after rebirth (cancellation token)
-- Simpler approach that doesn't interfere with the working race condition
 #>
 
 
@@ -36,13 +30,23 @@ custom_waypointable<public>:=class<concrete>(SuperClassInaugurable):
 
 
     Action(_Waypoint:waypoint, _Conveyor:custom_conveyor, StartDex:int)<suspends>:void=
+        Print("ACTION: Entry", ?Duration := 10.0)
         if:
             Location := _Waypoint.OffConveyorLocation?
             Rotation := _Waypoint.OffConveyorRotation?
-            prop.TeleportTo[vector3{X:=Location.X, Y:=Location.Y, Z:=Location.Z-300.0}, rotation{}]
         then:
-            prop.MoveTo(Location, Rotation, 2.0)
+            Print("ACTION: Got location", ?Duration := 10.0)
+            if (prop.TeleportTo[vector3{X:=Location.X, Y:=Location.Y, Z:=Location.Z-300.0}, rotation{}]):
+                Print("ACTION: Teleported, calling MoveTo", ?Duration := 10.0)
+                spawn{prop.MoveTo(Location, Rotation, 2.0)}
+                Print("ACTION: MoveTo returned", ?Duration := 10.0)
+            else:
+                Print("ACTION: Teleport FAILED", ?Duration := 10.0)
+        else:
+            Print("ACTION: NO LOCATION", ?Duration := 10.0)
+        Print("ACTION: Exiting", ?Duration := 10.0)
         return
+        
     Initialize<override>(Owner:purchaseable):void=
         set LocalOwner = option{Owner}
 
@@ -62,82 +66,46 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
     @editable CubeValue : float = 100.0
     @editable GrantID : int = 0
 
-    # Track spawned props for cleanup
+    # Track spawned props for cleanup on rebirth
     var SpawnedProps : []creative_prop = array{}
-    
-    # Cancellation token to stop spawn loop
-    var SpawnLoopActive <public> : logic = false
     
 
 
     GetAssociatedValue<override>():vector2=
         vector2{X:=CubeValue, Y:=CubeValue}
 
+    # Public cleanup method for rebirth
+    CleanupAllProps<public>():void=
+        Print("DROPPER: Cleaning up {SpawnedProps.Length} props", ?Duration := 10.0)
+        for(Prop : SpawnedProps):
+            if (Prop.IsValid[]):
+                Prop.Dispose()
+        set SpawnedProps = array{}
+
     Action<override>(_Waypoint:waypoint, _Conveyor:custom_conveyor, StartDex:int)<suspends>:void=
-        GlobalSuperlog("=== DROPPER ACTION STARTED - Moving dropper prop into position ===")
+        Print("DROPPER: Action started", ?Duration := 10.0)
         (super:)Action(_Waypoint, _Conveyor, StartDex)
-        GlobalSuperlog("=== DROPPER IN POSITION - Starting spawn loop ===")
-        
-        # Set spawn loop as active
-        set SpawnLoopActive = true
-        
+        Print("DROPPER: Super returned", ?Duration := 10.0)
+        Print("DROPPER: Starting spawn loop", ?Duration := 10.0)
         loop:
-            # Check if we should stop spawning
-            if (SpawnLoopActive = false):
-                GlobalSuperlog("Dropper spawn loop cancelled")
-                break
-                
             Sleep(PropSpawnRate)
-            GlobalSuperlog("Spawning prop from dropper")
             spawn{SpawnProp(_Conveyor, StartDex)}
 
-    # Enhanced cleanup - dispose props AND stop spawn loop
-    CleanupAllProps<public>():void=
-        GlobalSuperlog("Cleaning up dropper - disposing {SpawnedProps.Length} props")
-        
-        # Stop the spawn loop
-        set SpawnLoopActive = false
-        
-        # Dispose all tracked props
-        for(Prop : SpawnedProps):
-            Prop.Dispose()
-        set SpawnedProps = array{}
-        
-        GlobalSuperlog("Dropper cleanup complete")
     
             
     SpawnProp(_Conveyor:custom_conveyor, StartDex:int)<suspends>:void=
-        # Check if spawn loop is still active
-        if (SpawnLoopActive = false):
-            GlobalSuperlog("Spawn cancelled - dropper unlinked")
-            return
-            
-        GlobalSuperlog(">>> SpawnProp called with StartDex={StartDex}")
         var CurrentCubeValue : float = 0.0
         Sleep(0.1); set CurrentCubeValue = CubeValue
-        
-        GlobalSuperlog("Attempting to spawn prop...")
         MaybeSpawnedProp := SpawnProp(PropSpawn, vector3{X:=0.0,Y:=0.0,Z:=0.0}, rotation{})
-        
         if:
             SpawnedProp := MaybeSpawnedProp(0)?
         then:
-            GlobalSuperlog("Prop spawned successfully")
-            # Add to tracking array
+            # Track spawned prop for cleanup
             set SpawnedProps += array{SpawnedProp}
             
             SpawnedProp.Hide()
-            GlobalSuperlog("Prop hidden, starting movement loop")
-            
             var ActiveDex: int = StartDex
                 loop:
-                    # Check if spawn loop is still active before each movement
-                    if (SpawnLoopActive = false):
-                        GlobalSuperlog("Movement cancelled mid-loop - disposing prop")
-                        SpawnedProp.Dispose()
-                        return
-                        
-                    GlobalSuperlog("Loop iteration: ActiveDex={ActiveDex}")
                     if:
                         CNextWaypoint := _Conveyor.ConveyorWaypoints[ActiveDex]
                         CNextWaypointLocation := CNextWaypoint.Location
@@ -146,21 +114,13 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
                         NextLocation := transform{Translation:=CNextWaypointLocationValue, Scale:=vector3{X:=0.25, Y:=0.25, Z:=0.25}}
                         SpawnedProp.TeleportTo[TransformMain]
                     then:
-                        GlobalSuperlog("Waypoint found, moving prop")
                         # FIXED: Use StartDex instead of hardcoded 0
                         if. ActiveDex = StartDex then{
-                            GlobalSuperlog("First waypoint - teleporting to height and dropping")
-                            TargetPos := vector3{X:=CNextWaypointLocationValue.X,Y:=CNextWaypointLocationValue.Y,Z:=CNextWaypointLocationValue.Z+ExitHeight}
-                            GlobalSuperlog("Target position: X={TargetPos.X}, Y={TargetPos.Y}, Z={TargetPos.Z}")
-                            
-                            if(SpawnedProp.TeleportTo[TargetPos, rotation{}]){
-                                GlobalSuperlog("Teleport successful! Starting MoveTo and ShowAfter")
+                            if(SpawnedProp.TeleportTo[vector3{X:=CNextWaypointLocationValue.X,Y:=CNextWaypointLocationValue.Y,Z:=CNextWaypointLocationValue.Z+ExitHeight}, rotation{}]){
+                                
                                 spawn{ShowAfter(SpawnedProp, (55.0/ExitHeight)/10.0)}
                                 SpawnedProp.MoveTo(NextLocation, 55.0/ExitHeight)
-                                GlobalSuperlog("MoveTo called")
                             }
-                            else:
-                                GlobalSuperlog("ERROR: Teleport FAILED!")
 
                         } 
                         else if:
@@ -177,58 +137,18 @@ custom_dropper<public>:=class<concrete>(custom_waypointable):
                         LastWaypoint := _Conveyor.ConveyorWaypoints[ActiveDex-1]
                         LastWaypoint.Input = types.end
                     then:
-                        GlobalSuperlog("Prop reached end waypoint")
-                        
                         if:
                             Owner := LocalOwner?
+                            Base := Owner.MaybeOwner?
+                            Player := Base.Players[0]
+                            Value := Ceil[CurrentCubeValue]
                         then:
-                            GlobalSuperlog("Owner found: {Owner.Name}")
-                            
-                            if:
-                                Base := Owner.MaybeOwner?
-                            then:
-                                GlobalSuperlog("Base found: {Base.Base_Setup.Name}")
-                                GlobalSuperlog("Base has {Base.Players.Length} players")
-                                
-                                if:
-                                    Player := Base.Players[0]
-                                then:
-                                    GlobalSuperlog("Player found successfully")
-                                    
-                                    # Check if player is actually in the base's player list
-                                    if:
-                                        Base.Players.Find[Player]
-                                    then:
-                                        GlobalSuperlog("Player IS in base player list - calling GrantMoney")
-                                    else:
-                                        GlobalSuperlog("ERROR: Player NOT in base player list!")
-                                    
-                                    if:
-                                        Value := Ceil[CurrentCubeValue]
-                                    then:
-                                        GlobalSuperlog("About to call GrantMoney with GrantID={GrantID}, Value={Value}")
-                                        GrantMoney(Base, Player, GrantID, Value, Owner.BypassZone)
-                                        GlobalSuperlog("GrantMoney returned")
-                                else:
-                                    GlobalSuperlog("ERROR: No player at Base.Players[0]")
-                            else:
-                                GlobalSuperlog("ERROR: Owner.MaybeOwner failed - no Base")
-                        else:
-                            GlobalSuperlog("ERROR: LocalOwner not set")
-                        
+                            GrantMoney(Base,Player, GrantID, Value, Owner.BypassZone)
                         Sleep(0.01); SpawnedProp.Dispose(); return
                     else:
-                        GlobalSuperlog("ERROR: cube reached an invalid waypoint")
                         SpawnedProp.Dispose(); return
-        else:
-            GlobalSuperlog("ERROR: Failed to spawn prop from PropSpawn asset!")
 
-    ShowAfter(Prop:creative_prop, Delay:float)<suspends>:void=
-        GlobalSuperlog("ShowAfter waiting {Delay} seconds...")
-        Sleep(Delay)
-        Prop.Show()
-        GlobalSuperlog("Prop shown!")
-        return
+    ShowAfter(Prop:creative_prop, Delay:float)<suspends>:void={Sleep(Delay);  Prop.Show(); return}
        
        
         
@@ -305,48 +225,33 @@ waypoint<public>:=class<concrete><final>(Inaugurable):
     Play(_Owner:custom_conveyor, _StartDex:int):void=
         set Owner = option{_Owner}; set StartDex = _StartDex
         Location.Hide()
+    
     Link<public>(Item:custom_waypointable):void = 
-        GlobalSuperlog("=== LINKING ATTEMPT ===")
+        Print("WAYPOINT: Linking", ?Duration := 5.0)
         if:
-            _Owner := Owner?
+            CheckOwner := Owner?
             Item.Type = Input
             not Item.Placed?
         then:
-            GlobalSuperlog("Link successful - Item type matches and not already placed")
-            
-            # CRITICAL FIX: Reset dropper state FIRST, before any async operations
-            if:
-                Dropper := custom_dropper[Item]
-            then:
-                GlobalSuperlog("Resetting dropper SpawnLoopActive flag BEFORE spawn")
-                set Dropper.SpawnLoopActive = true
             
             Item.prop.Show()
             set Item.Placed = true
             set LinkedItem = option{Item}
-            
             NewLink.Signal()
             spawn{ManageLinkedItem()}
-            GlobalSuperlog("Linked and spawned ManageLinkedItem")
+            Print("WAYPOINT: Linked", ?Duration := 5.0)
             if:
                 not MaybeOrigin?
             then:
                 set MaybeOrigin = option{Item.prop.GetTransform()}
-        else:
-            GlobalSuperlog("=== LINK FAILED ===")
-            if (Item.Type = Input):
-                if (Item.Placed?):
-                    GlobalSuperlog("Item already placed at another waypoint")
-                else:
-                    GlobalSuperlog("Item not placed but link still failed")
-            else:
-                GlobalSuperlog("Type mismatch")
+
 
 
 
 
     
     Unlink<public>(Item:custom_waypointable):void=
+        Print("WAYPOINT: Unlinking", ?Duration := 5.0)
         set Item.Placed = false
         
         # Cleanup dropper props if this is a dropper
@@ -361,29 +266,31 @@ waypoint<public>:=class<concrete><final>(Inaugurable):
             
             BItem.prop.Hide()
         then:
-            GlobalSuperlog("Unlinked")
+            Print("WAYPOINT: Unlinked", ?Duration := 5.0)
+            set LinkedItem = false
             NewLink.Signal()
-            if(BItem.prop.TeleportTo[Origin]){GlobalSuperlog("Teleported {Origin.Translation}")}
+            if(BItem.prop.TeleportTo[Origin]){}
             
 
 
     ManageLinkedItem()<suspends>:void=
-            GlobalSuperlog("=== ManageLinkedItem STARTED ===")
+            Print("WAYPOINT: ManageLinkedItem", ?Duration := 5.0)
             if:
                 Item := LinkedItem?
-                _Owner := Owner?
+                ItemOwner := Owner?
             then:
-                GlobalSuperlog("Item and Owner found")
                 if:
                     Item.Type = types.dropper
                 then:
-                    GlobalSuperlog("Item is a dropper - calling Action directly")
-                    # Just call Action directly - it has its own infinite loop
-                    Item.Action(Self, _Owner, StartDex)
+                    Print("WAYPOINT: Dropper detected", ?Duration := 5.0)
+                    # Use race block to allow cancellation on rebirth
+                    loop:
+                        race:
+                            block:
+                                NewLink.Await()
+                                Print("WAYPOINT: NewLink await", ?Duration := 5.0)
+                                return
+                            block:
+                                Item.Action(Self, ItemOwner, StartDex)
                 else:
-                    GlobalSuperlog("Item is not a dropper - calling Action directly")
-                    Item.Action(Self, _Owner, StartDex)
-            else:
-                GlobalSuperlog("=== ManageLinkedItem FAILED - No Item or Owner ===")
-                
-        
+                    Item.Action(Self, ItemOwner, StartDex)
