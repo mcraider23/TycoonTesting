@@ -74,6 +74,27 @@ currency_ui<public>:=class():
                 then:
                     Print("== WARNING MANAGING REBIRTH UI TIMED OUT AND FAILED FOR BASE: {owner.Base_Setup.Name} ==")
 
+    ManageBonusUI(CAM: [agent]?text_block)<suspends>:void=
+        var timeout:int = 0
+        timeoutlimit:int=100
+        loop:
+            Sleep(0.1)
+            if:
+                ActiveHud := CAM[Player]?
+                PlayerStats := GetCoreStats[Player, owner.Base_Setup.PersistenceCore]
+                RebirthCount := PlayerStats.Rebirths
+            then:
+                # Simple linear bonus: rebirths * 10
+                BonusPercent := RebirthCount * 10
+                ActiveHud.SetText(S2M("+{BonusPercent}% Income Bonus"))
+            else:
+                GlobalSuperlog("Unable to attain bonus stats")
+                set timeout += 1
+                if:
+                    timeout >= timeoutlimit
+                then:
+                    Print("== WARNING MANAGING BONUS UI TIMED OUT ==")
+
     ManagePS(CAM: []tuple([agent]?text_block, ?int, string))<suspends>:void=
         TotalPS := CAM.Length-1
         var X: int = 0
@@ -253,6 +274,28 @@ currency_ui<public>:=class():
                 HorizontalAlignment := horizontal_alignment.Fill
                 VerticalAlignment := vertical_alignment.Top
 
+        # NEW: Add Currency Bonus display as SEPARATE overlay
+        BonusText := text_block:
+            DefaultText := S2M("+0%")
+            DefaultTextColor := color{R:=1.000000, G:=0.843, B:=0.0}  # Gold color
+
+        var BonusAmount: [agent]?text_block = map{}
+        if(set BonusAmount[Player] = option{BonusText}){}
+        spawn{ManageBonusUI(BonusAmount)}
+
+        BonusOverlay := overlay:
+            Slots := array:
+                overlay_slot:
+                    Widget := BonusText
+                    HorizontalAlignment := horizontal_alignment.Center
+                    VerticalAlignment := vertical_alignment.Center
+
+        set StackBoxHoldings += array:
+            stack_box_slot:
+                Widget:=BonusOverlay
+                HorizontalAlignment := horizontal_alignment.Fill
+                VerticalAlignment := vertical_alignment.Top
+
         var FindBottom : float = 80.0 + (125.0*StackBoxHoldings.Length-2.0)
 
         #Update UI
@@ -271,7 +314,7 @@ currency_ui<public>:=class():
             Slots:=array:
                 canvas_slot:
                     Widget:=CurrencyStackBox
-                    Anchors:=anchors{Minimum:=vector2{X:=0.032625,Y:=0.271111}, Maximum:=vector2{X:=0.214375,Y:=0.271111}}
+                    Anchors:=anchors{Minimum:=vector2{X:=0.032625,Y:=0.55}, Maximum:=vector2{X:=0.214375,Y:=0.55}}
                     Offsets := margin{Bottom := FindBottom}
                     SizeToContent := false
         if:

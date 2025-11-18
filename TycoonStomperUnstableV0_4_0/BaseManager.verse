@@ -201,6 +201,7 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
         Base_Setup.RebirthConfig.HudConfig.Initialize(Self)
         loop:
             Interactor := Base_Setup.RebirthConfig.RebirthButton.ActivatedEvent.Await()
+            
             if:
                 Player := player[Interactor]
                 PlayerStats := GetCoreStats[Player, Base_Setup.PersistenceCore]
@@ -237,7 +238,7 @@ base<public>:=class<concrete><unique>(SuperInaugurable, Rebirthable, Runtime, St
             Base_Setup.RebirthConfig.RebirthAccolade.Award(Player)
         
         # HUNGER SYSTEM: Deactivate hunger for this player
-            HungerSystem.DeactivateHungerForPlayer(Player)
+            spawn{HungerSystem.DeactivateHungerForPlayer(Player)}
         
             set Players = Players.RemoveAllElements(Player)
             

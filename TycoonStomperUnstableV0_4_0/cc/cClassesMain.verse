@@ -22,7 +22,7 @@ rebirth_main<public>:=class<concrete>(Inaugurable, PlayerSpecificStringReturnabl
     @editable var RebirthCost <public> : float = 1000.0
     @editable var RebirthCostCurrencyID <public> : int = 0
     @editable var RebirthCostMultiplier <public> : float = 1.5
-    @editable var HudConfig <public> : hud_main = hud_main{OnFailedMessage := option{"Failed to rebirth you need [RebirthAmountNeeded]"}; OnSuccessMessage := option{"You have rebirthed! Every 100 now = [RebirthCashMultiplier]"}}
+    @editable var HudConfig <public> : hud_main = hud_main{OnFailedMessage := option{"You must unlock all items before rebirthing! You need [RebirthAmountNeeded] more currency."}; OnSuccessMessage := option{"You have rebirthed! Every 100 now = [RebirthCashMultiplier]"}}
     @editable var RebirthAccolade <public> : accolades_device = accolades_device{}
 
 

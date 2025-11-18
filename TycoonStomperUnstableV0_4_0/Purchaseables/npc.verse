@@ -5,12 +5,11 @@ using { /Fortnite.com/Game }
 using { /UnrealEngine.com}
 using { /UnrealEngine.com/Temporary/SpatialMath }
 using {cc}
+
 npc_buyable<public>:=class<concrete><final>(purchaseable):
 
     @editable var NPCSpawnerConfig : unique_npc_spawner = unique_npc_spawner{}
     var Ptype <override> :  PurchaseableType = PurchaseableType.NPCBuyable
-
-
 
     Initialize<override>(Hostess:base, I:int):void=
         #Calls the parent class's Initialize method
@@ -51,7 +50,7 @@ npc_buyable<public>:=class<concrete><final>(purchaseable):
 
         
 unique_npc_spawner<public>:=class<concrete>(Toggleable, Inaugurable):
-    @editable var NPCSpawner : npc_spawner_device = npc_spawner_device{}
+    @editable var NPCSpawners : []npc_spawner_device = array{}  # Changed to array
     @editable var CurrencyOnKillID  : int = {0}
     @editable var OnKillGrantAmount : int = {0}
     @editable var OnKillExperienceAmount : int = {0}
@@ -59,15 +58,33 @@ unique_npc_spawner<public>:=class<concrete>(Toggleable, Inaugurable):
     
     OnKill : event(agent) = event(agent){}
 
-    Disable<override>():void={NPCSpawner.Disable()}
-    Enable<override>():void={NPCSpawner.Enable()}
+    Disable<override>():void=
+        # Disable all spawners in the array
+        for (Spawner : NPCSpawners):
+            Spawner.Disable()
 
-    Initialize<override>(Base:base):void={NPCSpawner.Disable(); spawn{AwaitKill()}}
+    Enable<override>():void=
+        # Enable all spawners in the array
+        for (Spawner : NPCSpawners):
+            Spawner.Enable()
 
-    AwaitKill()<suspends>:void=
+    Initialize<override>(Base:base):void=
+        # Disable all spawners initially
+        for (Spawner : NPCSpawners):
+            Spawner.Disable()
+        
+        # Start listening for kills on all spawners
+        spawn{AwaitKills()}
+
+    AwaitKills()<suspends>:void=
+        # Spawn a separate listener for each spawner
+        for (Spawner : NPCSpawners):
+            spawn{AwaitKillFromSpawner(Spawner)}
+
+    AwaitKillFromSpawner(Spawner:npc_spawner_device)<suspends>:void=
         loop:
-            PreventInf();
-            InteractionResult := NPCSpawner.EliminatedEvent.Await()
+            PreventInf()
+            InteractionResult := Spawner.EliminatedEvent.Await()
             if:
                 Agent := InteractionResult.Source?
             then:

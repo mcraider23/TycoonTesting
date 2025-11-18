@@ -210,6 +210,7 @@ base_setup<public>:=class<concrete>(Inaugurable, RuntimeInaugurable):
     @editable var HudConfig <public> : hud_main = hud_main{OnFailedMessage := option{"Failed to claim base [FailureReason]"}; OnSuccessMessage := option{"Successfully claimed base [Name]"}}
     @editable var BillBoardConfig <public> : billboard_main = billboard_main{}
     @editable var RebirthConfig <public> : rebirth_main = rebirth_main{}
+    @editable var MapIndicator <public> : ?map_indicator_device = false
     @editable {ToolTip:=PurchaseableConfigTT}var PurchaseableConfigs <public> : basic_prop_buyable = basic_prop_buyable{
         Ptype:=PurchaseableType.Undefined
         Name := "Base Setup"

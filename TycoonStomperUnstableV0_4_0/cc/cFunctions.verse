@@ -100,8 +100,11 @@ RemoveMoney<public>(Base:base, Player:player, GrantID:int, Amount:int)<transacts
         
 
 
+# UPDATED: Linear +10% per rebirth instead of exponential
 GetRebirthAmount<public>(Base:base, Rebirths:int, Amount:int)<decides><transacts>:int=
-    return Round[(Pow(Base.Base_Setup.RebirthConfig.RebirthCashMultiplier, Rebirths*1.0) * Amount)]
+    # Each rebirth adds 10% bonus (1.0 + 0.1 * rebirths)
+    Multiplier := 1.0 + (0.1 * Rebirths * 1.0)
+    return Round[Multiplier * Amount * 1.0]
 
 GetRebirthCostAmount<public>(Base:base, Rebirths:int)<decides><transacts>:int=
     return Round[(Pow(Base.Base_Setup.RebirthConfig.RebirthCostMultiplier, Rebirths*1.0) * Base.Base_Setup.RebirthConfig.RebirthCost)]

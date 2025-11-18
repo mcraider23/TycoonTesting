@@ -517,7 +517,7 @@ purchaseable<public>:=class<abstract>(Detailable, Hostable, SuperInaugurable, Re
             OnBoughtEvent.Signal(Player)
             Owner.NewItemBought.Signal(Self)
 
-            # ALWAYS unlock dependents (even when loading from persistence)
+            # ALWAYS unlock dependents (even when loading)
             # This ensures dependent items are available after reload
             Result := UnlockDependents(Owner)
             if(Result(1)?){GlobalSuperlog("When Unlocking all dependents, ({Result(0)}) failed to unlock")}

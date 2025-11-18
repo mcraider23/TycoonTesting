@@ -1,4 +1,4 @@
- using { /Verse.org/Simulation }
+using { /Verse.org/Simulation }
 using { /Fortnite.com/Devices }
 using {/Fortnite.com/Teams}
 using { /UnrealEngine.com/Temporary/SpatialMath }
@@ -68,6 +68,9 @@ hitable_buyable<public>:=class<concrete><final>(fxpurchaseable):
                     GrantXP(Owner, Player, hitableConfig.OnHitExperienceAmount)
                     Granter.GrantItem(Player)
                     
+                    # Award XP accolade on hit
+                    hitableConfig.HitXPAccolade.Award(Player)
+                    
                     # Add rebirthed amount to combo
                     hitableConfig.AddToCombo(RebirthedReward)
                     hitableConfig.AddXP(1)
@@ -111,6 +114,9 @@ unique_hitable_buyable:=class<concrete>(Toggleable, Inaugurable):
     @editable var OptItemGranter : item_granter_device = {item_granter_device{}}
     @editable var hitdetectors : []trigger_device = array{}
     @editable var OverrideHudConfig : ?hud_main = option{hud_main{OnFailedMessage := option{""}; OnSuccessMessage := option{"+[ComboTotal] (Lvl [HitableLevel])"}}}
+    
+    # Accolades device for XP on hit
+    @editable var HitXPAccolade : accolades_device = accolades_device{}
 
     # Animation settings for hit feedback
     @editable var HitAnimationEnabled : logic = true

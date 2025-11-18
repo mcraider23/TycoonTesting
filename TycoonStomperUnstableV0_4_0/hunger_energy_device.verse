@@ -32,7 +32,7 @@ hunger_energy_device := class(creative_device):
     @editable var LowStatDamage : float = 1.0
     @editable var BothStatsDamage : float = 5.0
 
-    var PlayerCanvases : [player]canvas = map{}  # CHANGED: Store canvas instead of stack_box
+    var PlayerCanvases : [player]canvas = map{}
     var PlayerHunger : [player]float = map{}
     var PlayerEnergy : [player]float = map{}
     var PlayersInRestZone : [player]logic = map{}
@@ -74,13 +74,17 @@ hunger_energy_device := class(creative_device):
                 ZOrder := 100
                 InputMode := ui_input_mode.None
             })
-            if (set PlayerCanvases[Player] = Canvas) {}  # CHANGED: Store canvas
+            if (set PlayerCanvases[Player] = Canvas) {}
 
     UpdatePlayerStats(Player : player):void =
-        if (Canvas := PlayerCanvases[Player]):  # CHANGED: Get canvas
+        # CRITICAL FIX: Check if player is still active before updating
+        if (ActivePlayers[Player] = false):
+            return
+            
+        if (Canvas := PlayerCanvases[Player]):
             if (Canvas.Slots.Length > 0):
                 if (CanvasSlot := Canvas.Slots[0]):
-                    if (StatsBox := stack_box[CanvasSlot.Widget]):  # Get StatsBox from canvas
+                    if (StatsBox := stack_box[CanvasSlot.Widget]):
                         if (Hunger := PlayerHunger[Player]):
                             if (Energy := PlayerEnergy[Player]):
                                 if (StatsBox.Slots.Length = 2):
@@ -118,11 +122,17 @@ hunger_energy_device := class(creative_device):
         SubscribeToElimination(Player)
 
     # PUBLIC: Deactivate hunger (call this on rebirth)
-    DeactivateHungerForPlayer<public>(Player : player):void =
+    DeactivateHungerForPlayer<public>(Player : player)<suspends>:void =
         Print("Deactivating hunger system for player")
+        
+        # CRITICAL: Set inactive FIRST before removing UI
         if (set ActivePlayers[Player] = false) {}
         
-        # CRITICAL FIX: Remove the UI widget when deactivating
+        # Small delay to ensure all loops see the inactive state
+        # This prevents race conditions where loops try to update UI as we remove it
+        Sleep(0.1)
+        
+        # Now safe to remove the UI widget
         if (Canvas := PlayerCanvases[Player]):
             if (PlayerUI := GetPlayerUI[Player]):
                 PlayerUI.RemoveWidget(Canvas)
@@ -156,7 +166,10 @@ hunger_energy_device := class(creative_device):
                             NewEnergy := Max(0.0, Energy - EnergyDrainRate)
                             if (set PlayerHunger[Player] = NewHunger) {}
                             if (set PlayerEnergy[Player] = NewEnergy) {}
-                            UpdatePlayerStats(Player)
+                            
+                            # CRITICAL FIX: Check active status before updating UI
+                            if (ActivePlayers[Player] = true):
+                                UpdatePlayerStats(Player)
 
     RestorationLoop()<suspends>:void =
         loop:
@@ -167,12 +180,18 @@ hunger_energy_device := class(creative_device):
                         if (Energy := PlayerEnergy[Player]):
                             NewEnergy := Min(InitialEnergy, Energy + EnergyRechargeRate)
                             if (set PlayerEnergy[Player] = NewEnergy) {}
-                            UpdatePlayerStats(Player)
+                            
+                            # CRITICAL FIX: Check active status before updating UI
+                            if (ActivePlayers[Player] = true):
+                                UpdatePlayerStats(Player)
                     if (PlayersInHungerZone[Player] = true):
                         if (Hunger := PlayerHunger[Player]):
                             NewHunger := Min(InitialHunger, Hunger + HungerRestorePerFood)
                             if (set PlayerHunger[Player] = NewHunger) {}
-                            UpdatePlayerStats(Player)
+                            
+                            # CRITICAL FIX: Check active status before updating UI
+                            if (ActivePlayers[Player] = true):
+                                UpdatePlayerStats(Player)
 
     DamageLoop()<suspends>:void =
         loop:

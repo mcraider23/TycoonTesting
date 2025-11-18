@@ -39,6 +39,10 @@ dancefloor_buyable<public>:=class<concrete><final>(purchaseable):
                 Sleep(dancefloorconfig.EmoteGrantInterval)
                 GrantMoney(Owner, Player, dancefloorconfig.CurrencyOnEmoteID, dancefloorconfig.OnEmoteIntervalGrantAmount, BypassZone)
                 GrantXP(Owner, Player, dancefloorconfig.OnEmoteIntervalExperienceAmount)
+                
+                # Award XP accolade while dancing
+                dancefloorconfig.DanceXPAccolade.Award(Player)
+                
                 # Use the dancefloor-specific HUD config
                 dancefloorconfig.EmoteHudConfig.OnSuccessfullPlayer(Player)
 
@@ -63,6 +67,9 @@ unique_dancefloor_buyable:=class<concrete>(Toggleable, Inaugurable, StringReturn
         OnFailedMessage := option{""}
         OnSuccessMessage := option{"+ [GrantAmount] currency from dancing!"}
     }
+    
+    # Accolades device for XP while dancing
+    @editable var DanceXPAccolade : accolades_device = accolades_device{}
 
     OnEmote : event(agent) = event(agent){}
     OnEmoteStop : event(agent) = event(agent){}
